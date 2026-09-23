@@ -1,10 +1,17 @@
-# ─── Paths ─────────────────────────────────────────────────────────────
-paths:
-  md_root: "output/md/20260922_234455-IBM-Ceph-TOC-20260922_231027"
-  chroma_db: "E:/ceph-rag/chroma_db"
-  collection_name: "ibm_ceph_docs"
+# ─── Shared RAG Configuration ──────────────────────────────────────────────
+#
+# NOTE: Paths (md_root, chroma_db, collection_name) are now derived
+# automatically from the selected category slug at runtime:
+#
+#   md_root          →  output/md/<category_slug>
+#   chroma_db        →  output/chroma_db/<category_slug>
+#   collection_name  →  <category_slug>
+#
+# You do NOT need to edit paths here. This file controls shared
+# model/embedding/retrieval settings that apply to ALL categories.
+# ─────────────────────────────────────────────────────────────────────────────
 
-# ─── Chunking ──────────────────────────────────────────────────────────
+# ─── Chunking ──────────────────────────────────────────────────────────────
 chunking:
   max_tokens: 1024
   overlap_tokens: 100
@@ -19,14 +26,14 @@ embeddings:
   base_url: "http://localhost:11434"
   batch_size: 16
 
-# ─── Vector DB ─────────────────────────────────────────────────────────
+# ─── Vector DB ─────────────────────────────────────────────────────────────
 vectordb:
   provider: "chromadb"
   hnsw_space: "cosine"
   hnsw_construction_ef: 200
   hnsw_M: 16
 
-# ─── Retrieval ─────────────────────────────────────────────────────────
+# ─── Retrieval ─────────────────────────────────────────────────────────────
 retrieval:
   top_k: 8
   # Chunks with cosine similarity below this threshold are discarded before
@@ -36,12 +43,7 @@ retrieval:
   # context may be insufficient and should not speculate.
   low_confidence_threshold: 0.72
 
-  # Optional filters (uncomment to use):
-  # chapter_filter: "11-planning"
-  # content_type_filter: "procedure"
-  # topic_tags: ["crush", "osd"]
-
-# ─── LLM (Swappable) ───────────────────────────────────────────────────
+# ─── LLM (Swappable) ───────────────────────────────────────────────────────
 llm:
   # Option 1: Local Ollama (FREE) — DEFAULT
   provider: "ollama"
@@ -64,10 +66,10 @@ llm:
   # temperature: 0.1
   # max_tokens: 2048
 
-# ─── Prompt Template ───────────────────────────────────────────────────
+# ─── Prompt Template (generic — product name injected at runtime) ───────────
 prompt:
   system: |
-    You are an IBM Storage Ceph 9.9.1 expert assistant. Answer ONLY from the context provided.
+    You are an IBM documentation expert assistant. Answer ONLY from the context provided.
     Rules:
     - NEVER invent, guess, or extrapolate commands, options, file paths, or values not present verbatim in the context.
     - Copy CLI commands character-for-character as they appear in the context. Do not paraphrase commands.
@@ -78,12 +80,12 @@ prompt:
     - NEVER echo or repeat the source labels (e.g. "[Source 1: ...]") in your answer. Those are internal references only.
     - When multiple sources cover the same topic, prefer the one tagged as a procedure over concept or reference.
   system_low_confidence: |
-    You are an IBM Storage Ceph 9.9.1 expert assistant. The retrieved context has LOW confidence relevance to the question.
+    You are an IBM documentation expert assistant. The retrieved context has LOW confidence relevance to the question.
     Rules:
     - Be explicit at the start: "The available documentation does not directly address this question."
     - Only share what IS in the context that could be partially relevant.
     - NEVER invent commands, steps, or configuration values.
-    - Do not speculate about how Ceph might work — only quote from the context.
+    - Do not speculate — only quote from the context.
     - NEVER echo or repeat the source labels (e.g. "[Source 1: ...]") in your answer.
   template: |
     Context:

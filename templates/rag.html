@@ -386,6 +386,28 @@
     .btn { padding: 10px 20px; font-size: 13px; font-weight: 600; }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    /* Per-tab Knowledge Base selector row */
+    .kb-selector-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 10px 14px;
+      background: var(--surface-2, #21262d);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-bottom: 18px;
+    }
+    .kb-label {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--text);
+      white-space: nowrap;
+    }
+    .kb-select { min-width: 200px; font-size: 13px; }
+    .kb-refresh { padding: 4px 10px; font-size: 12px; }
+    .kb-hint { font-size: 11.5px; color: var(--muted); }
+
     /* Config display */
     .config-display {
       background: #0d1117;
@@ -417,7 +439,7 @@
           <rect width="32" height="32" rx="6" fill="#0f62fe"/>
           <path d="M8 10h16M8 16h12M8 22h8" stroke="white" stroke-width="2.2" stroke-linecap="round"/>
         </svg>
-        <span class="header-title">IBM Ceph Docs RAG</span>
+        <span class="header-title">IBM Docs RAG</span>
       </div>
       <nav style="display:flex;gap:6px;">
         <a href="/" class="btn btn-secondary nav-link">⚙️ Scraper</a>
@@ -433,28 +455,84 @@
 
     <!-- ── Tabs ───────────────────────────────────────────────────── -->
     <div class="rag-tabs">
-      <button class="rag-tab active" data-tab="query">💬 Query (RAG)</button>
+      <button class="rag-tab active" data-tab="ingest">📥 Ingestion</button>
+      <button class="rag-tab" data-tab="query">💬 Query (RAG)</button>
       <button class="rag-tab" data-tab="search">🔍 Search Only</button>
-      <button class="rag-tab" data-tab="ingest">📥 Ingestion</button>
       <button class="rag-tab" data-tab="config">⚙️ Config</button>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════
-         TAB 1: QUERY (Full RAG)
+         TAB 1: INGESTION (first — must ingest before querying)
          ══════════════════════════════════════════════════════════════════ -->
-    <div class="rag-panel active" id="tab-query">
+    <div class="rag-panel active" id="tab-ingest">
       <div class="card">
-        <div class="card-title">💬 Ask IBM Ceph Expert</div>
+        <div class="card-title">📥 RAG Ingestion</div>
         <p class="action-desc">
-          Full RAG pipeline: semantic search + LLM generation. Supports Ollama (local), GPT-4o, GPT-4o-mini.
+          Select a knowledge base and ingest its markdown files into ChromaDB.
+          Only needs to be run once per knowledge base (or again after re-scraping).
         </p>
+
+        <!-- Per-tab KB selector -->
+        <div class="kb-selector-row">
+          <label class="kb-label">🏷️ Knowledge Base</label>
+          <select id="ingest-category-select" class="filter-select kb-select"></select>
+          <button class="btn btn-secondary kb-refresh" id="btn-ingest-refresh-cats">🔄</button>
+          <span id="ingest-kb-hint" class="kb-hint"></span>
+        </div>
+
+        <div style="display:flex;gap:10px;margin-bottom:16px;align-items:center;">
+          <button class="btn btn-primary" id="btn-ingest">▶ Start Ingestion</button>
+          <button class="btn btn-danger hidden" id="btn-ingest-cancel">Cancel</button>
+          <span id="ingest-category-badge" style="font-size:12px;color:var(--muted);"></span>
+        </div>
+
+        <div class="stat-row" id="ingest-stats"></div>
+
+        <div class="card hidden" id="ingest-progress">
+          <div class="log-header">
+            <div class="card-title">⏳ Ingestion Progress</div>
+            <span id="ingest-log-count" style="font-size:11px;color:var(--muted);"></span>
+          </div>
+          <div class="log-terminal" id="ingest-log" style="height:420px;"></div>
+        </div>
+
+        <div class="card card-error hidden" id="ingest-error-card">
+          <div class="card-title">❌ Error</div>
+          <pre id="ingest-error-msg" style="white-space:pre-wrap;font-size:12.5px;"></pre>
+        </div>
+
+        <div class="card hidden" id="ingest-done">
+          <div class="card-title">✅ Ingestion Complete</div>
+          <div class="stat-row" id="ingest-final-stats"></div>
+          <button class="btn btn-secondary" id="btn-ingest-new" style="margin-top:12px;">New Ingestion</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB 2: QUERY (Full RAG)
+         ══════════════════════════════════════════════════════════════════ -->
+    <div class="rag-panel" id="tab-query">
+      <div class="card">
+        <div class="card-title">💬 Ask the Expert</div>
+        <p class="action-desc">
+          Full RAG pipeline: semantic search + LLM generation.
+        </p>
+
+        <!-- Per-tab KB selector -->
+        <div class="kb-selector-row">
+          <label class="kb-label">🏷️ Knowledge Base</label>
+          <select id="query-category-select" class="filter-select kb-select"></select>
+          <button class="btn btn-secondary kb-refresh" id="btn-query-refresh-cats">🔄</button>
+          <span id="query-kb-hint" class="kb-hint"></span>
+        </div>
 
         <div class="input-row">
           <textarea
             id="query-input"
             class="query-input"
             rows="3"
-            placeholder="Ask anything about IBM Storage Ceph... e.g., 'How to create erasure coded pool?' or 'Why are my PGs degraded?'"
+            placeholder="Ask anything about the selected knowledge base…"
             spellcheck="false"
             aria-label="Question"
           ></textarea>
@@ -491,13 +569,11 @@
           <button class="btn btn-secondary" id="btn-query-clear">Clear</button>
         </div>
 
-        <!-- Answer area (inside the same card, separated by a border) -->
         <div class="answer-area hidden" id="answer-card">
           <div class="answer-header">
             <span class="answer-title">🤖 Answer</span>
             <span class="answer-meta" id="answer-meta"></span>
           </div>
-          <!-- Low-confidence warning banner -->
           <div class="hidden" id="low-confidence-banner" style="
             background: rgba(210,153,34,0.12);
             border: 1px solid #d29922;
@@ -511,21 +587,17 @@
             The answer may be incomplete or imprecise. Best score: <span id="best-score-badge"></span>
           </div>
           <div class="answer-text" id="answer-text"></div>
-
-          <!-- Sources -->
           <div class="sources-section hidden" id="sources-section">
             <div class="sources-title">📚 Sources (<span id="sources-count">0</span> chunks)</div>
             <div id="sources-list"></div>
           </div>
         </div>
 
-        <!-- Error card -->
         <div class="card card-error hidden" id="query-error-card">
           <div class="card-title">❌ Error</div>
           <pre id="query-error-msg" style="white-space:pre-wrap;font-size:12.5px;"></pre>
         </div>
 
-        <!-- Loading -->
         <div class="card hidden" id="query-loading">
           <div class="log-header">
             <div class="card-title">🔍 Searching &amp; Generating…</div>
@@ -536,21 +608,29 @@
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════
-         TAB 2: SEARCH ONLY (Semantic Search)
+         TAB 3: SEARCH ONLY
          ══════════════════════════════════════════════════════════════════ -->
     <div class="rag-panel" id="tab-search">
       <div class="card">
         <div class="card-title">🔍 Semantic Search</div>
         <p class="action-desc">
-          Vector similarity search only — no LLM. Use to test retrieval quality and find relevant sections.
+          Vector similarity search only — no LLM. Use to test retrieval quality.
         </p>
+
+        <!-- Per-tab KB selector -->
+        <div class="kb-selector-row">
+          <label class="kb-label">🏷️ Knowledge Base</label>
+          <select id="search-category-select" class="filter-select kb-select"></select>
+          <button class="btn btn-secondary kb-refresh" id="btn-search-refresh-cats">🔄</button>
+          <span id="search-kb-hint" class="kb-hint"></span>
+        </div>
 
         <div class="input-row">
           <input
             type="text"
             id="search-input"
             class="query-input"
-            placeholder="Search query... e.g., 'device class ssd' or 'crush rule erasure'"
+            placeholder="Search query… e.g. 'device class ssd' or 'crush rule erasure'"
             spellcheck="false"
             aria-label="Search query"
           />
@@ -581,19 +661,12 @@
           <button class="btn btn-secondary" id="btn-search-clear">Clear</button>
         </div>
 
-        <!-- Results table -->
         <div class="card hidden" id="search-results-card">
           <div class="card-title">📋 Results (<span id="search-count">0</span>)</div>
           <div class="results-table-wrap">
             <table class="results-table">
               <thead>
-                <tr>
-                  <th>Score</th>
-                  <th>File</th>
-                  <th>Chapter</th>
-                  <th>Type</th>
-                  <th>Preview</th>
-                </tr>
+                <tr><th>Score</th><th>File</th><th>Chapter</th><th>Type</th><th>Preview</th></tr>
               </thead>
               <tbody id="search-tbody"></tbody>
             </table>
@@ -608,53 +681,22 @@
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════════
-         TAB 3: INGESTION
-         ══════════════════════════════════════════════════════════════════ -->
-    <div class="rag-panel" id="tab-ingest">
-      <div class="card">
-        <div class="card-title">📥 RAG Ingestion</div>
-        <p class="action-desc">
-          One-time setup: processes all markdown files, creates chunks, generates embeddings on GPU, stores in ChromaDB.
-          Run this once after scraping completes. Takes ~30 seconds on RTX 5070 Ti.
-        </p>
-
-        <div style="display:flex;gap:10px;margin-bottom:16px;">
-          <button class="btn btn-primary" id="btn-ingest">▶ Start Ingestion</button>
-          <button class="btn btn-danger hidden" id="btn-ingest-cancel">Cancel</button>
-        </div>
-
-        <div class="stat-row" id="ingest-stats"></div>
-
-        <div class="card hidden" id="ingest-progress">
-          <div class="log-header">
-            <div class="card-title">⏳ Ingestion Progress</div>
-            <span id="ingest-log-count" style="font-size:11px;color:var(--muted);"></span>
-          </div>
-          <div class="log-terminal" id="ingest-log" style="height:420px;"></div>
-        </div>
-
-        <div class="card card-error hidden" id="ingest-error-card">
-          <div class="card-title">❌ Error</div>
-          <pre id="ingest-error-msg" style="white-space:pre-wrap;font-size:12.5px;"></pre>
-        </div>
-
-        <div class="card hidden" id="ingest-done">
-          <div class="card-title">✅ Ingestion Complete</div>
-          <div class="stat-row" id="ingest-final-stats"></div>
-          <button class="btn btn-secondary" id="btn-ingest-new" style="margin-top:12px;">New Ingestion</button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ══════════════════════════════════════════════════════════════════
          TAB 4: CONFIG
          ══════════════════════════════════════════════════════════════════ -->
     <div class="rag-panel" id="tab-config">
       <div class="card">
         <div class="card-title">⚙️ Current Configuration</div>
         <p class="action-desc">Live configuration from config.yaml (API keys redacted).</p>
-        <button class="btn btn-secondary" id="btn-config-refresh" style="margin-bottom:16px;">🔄 Refresh</button>
-        <pre class="config-display" id="config-display">Click Refresh to load configuration.</pre>
+
+        <!-- Per-tab KB selector -->
+        <div class="kb-selector-row">
+          <label class="kb-label">🏷️ Knowledge Base</label>
+          <select id="config-category-select" class="filter-select kb-select"></select>
+          <button class="btn btn-secondary kb-refresh" id="btn-config-refresh-cats">🔄</button>
+        </div>
+
+        <button class="btn btn-secondary" id="btn-config-refresh" style="margin-bottom:16px;">🔄 Refresh Config</button>
+        <pre class="config-display" id="config-display">Select a knowledge base above and click Refresh Config.</pre>
       </div>
     </div>
 
@@ -679,6 +721,84 @@
     const $ = id => document.getElementById(id);
     const hide = el => el.classList.add('hidden');
     const show = el => el.classList.remove('hidden');
+
+    // ── Per-tab category selectors ──────────────────────────────────
+    // Each tab has its own <select> — we keep them in sync so switching
+    // tabs remembers the last chosen category.
+    const KB_SELECTS = {
+      ingest: 'ingest-category-select',
+      query:  'query-category-select',
+      search: 'search-category-select',
+      config: 'config-category-select',
+    };
+    const KB_HINTS = {
+      ingest: 'ingest-kb-hint',
+      query:  'query-kb-hint',
+      search: 'search-kb-hint',
+    };
+
+    function getCategory(tab) {
+      return $(KB_SELECTS[tab])?.value || '';
+    }
+
+    // Sync all selectors to the same value whenever one changes
+    function syncSelectors(slug) {
+      Object.values(KB_SELECTS).forEach(id => {
+        const sel = $(id);
+        if (sel) sel.value = slug;
+      });
+    }
+    Object.entries(KB_SELECTS).forEach(([tab, selId]) => {
+      $(selId)?.addEventListener('change', e => syncSelectors(e.target.value));
+    });
+
+    async function loadCategories(activeTab) {
+      // Build option HTML from API response
+      let optHtml = '<option value="">⏳ Loading…</option>';
+      let hintText = '';
+      let firstSlug = '';
+      try {
+        const cats = await apiCall('/api/categories');
+        if (!cats.length) {
+          optHtml  = '<option value="">⚠️ No knowledge bases found — run TOC + Scraper first</option>';
+          hintText = 'No Excel files with a Category name found.';
+        } else {
+          optHtml = cats.map(c => {
+            const badge = c.ingested ? ' ✅' : (c.md_ready ? ' 📄' : ' ⚠️');
+            return `<option value="${escHtml(c.slug)}">${escHtml(c.label)}${badge}</option>`;
+          }).join('');
+          firstSlug = cats[0].slug;
+          hintText  = `${cats.length} knowledge base(s)  ·  ✅ ingested  📄 ready to ingest  ⚠️ needs scraping`;
+        }
+      } catch (err) {
+        optHtml  = '<option value="">⚠️ Failed to load</option>';
+        hintText = String(err);
+      }
+
+      // Apply to all selects, preserving current selection where possible
+      Object.entries(KB_SELECTS).forEach(([tab, selId]) => {
+        const sel = $(selId);
+        if (!sel) return;
+        const prev = sel.value;
+        sel.innerHTML = optHtml;
+        if (prev && sel.querySelector(`option[value="${prev}"]`)) {
+          sel.value = prev;
+        } else if (firstSlug) {
+          sel.value = firstSlug;
+        }
+      });
+
+      // Update hints
+      Object.entries(KB_HINTS).forEach(([tab, hintId]) => {
+        const h = $(hintId);
+        if (h) h.textContent = hintText;
+      });
+    }
+
+    $('btn-ingest-refresh-cats').addEventListener('click', () => loadCategories('ingest'));
+    $('btn-query-refresh-cats').addEventListener('click',  () => loadCategories('query'));
+    $('btn-search-refresh-cats').addEventListener('click', () => loadCategories('search'));
+    $('btn-config-refresh-cats').addEventListener('click', () => loadCategories('config'));
 
     // ── Populate chapter/type selects from a single source of truth ─
     const CHAPTERS = [
@@ -768,11 +888,18 @@
     }
 
     // ══════════════════════════════════════════════════════════════════
-    // TAB 1: QUERY (Full RAG)
+    // TAB 2 (UI): QUERY (Full RAG)
     // ══════════════════════════════════════════════════════════════════
     let queryAbortController = null;
 
     async function runQuery() {
+      const category = getCategory('query');
+      if (!category) {
+        $('query-error-msg').textContent = 'Please select a Knowledge Base above.';
+        show($('query-error-card'));
+        return;
+      }
+
       const question = $('query-input').value.trim();
       if (!question) {
         showInputError('query-input', 'query-input-error');
@@ -780,7 +907,6 @@
       }
       clearInputError('query-input', 'query-input-error');
 
-      // Clear previous result before showing loader
       $('answer-text').innerHTML = '';
       $('answer-meta').textContent = '';
       $('sources-list').innerHTML = '';
@@ -792,7 +918,6 @@
       $('btn-query').disabled = true;
       $('btn-query').textContent = '⏳ Processing...';
 
-      // Abort any prior in-flight request
       if (queryAbortController) queryAbortController.abort();
       queryAbortController = new AbortController();
 
@@ -801,6 +926,7 @@
       try {
         const data = {
           question,
+          category,
           top_k: parseInt($('query-topk').value) || 5,
           chapter_filter: $('query-chapter').value || null,
           content_type_filter: $('query-type').value || null,
@@ -928,9 +1054,16 @@
     });
 
     // ══════════════════════════════════════════════════════════════════
-    // TAB 2: SEARCH ONLY
+    // TAB 3 (UI): SEARCH ONLY
     // ══════════════════════════════════════════════════════════════════
     async function runSearch() {
+      const categoryS = getCategory('search');
+      if (!categoryS) {
+        $('search-error-msg').textContent = 'Please select a Knowledge Base above.';
+        show($('search-error-card'));
+        return;
+      }
+
       const query = $('search-input').value.trim();
       if (!query) {
         showInputError('search-input', 'search-input-error');
@@ -946,6 +1079,7 @@
       try {
         const data = {
           query,
+          category: categoryS,
           top_k: parseInt($('search-topk').value) || 10,
           chapter_filter: $('search-chapter').value || null,
           content_type_filter: $('search-type').value || null,
@@ -1001,13 +1135,19 @@
     });
 
     // ══════════════════════════════════════════════════════════════════
-    // TAB 3: INGESTION
+    // TAB 1 (UI): INGESTION
     // ══════════════════════════════════════════════════════════════════
     let ingestJobId = null;
     let ingestPollTimer = null;
-    let ingestLogSeenCount = 0; // track how many log lines we've already appended
+    let ingestLogSeenCount = 0;
 
     async function startIngest() {
+      const categoryI = getCategory('ingest');
+      if (!categoryI) {
+        alert('Please select a Knowledge Base above before ingesting.');
+        return;
+      }
+
       hide($('ingest-done'));
       hide($('ingest-error-card'));
       show($('ingest-progress'));
@@ -1016,11 +1156,13 @@
       $('btn-ingest').disabled = true;
       ingestLogSeenCount = 0;
       show($('btn-ingest-cancel'));
+      $('ingest-category-badge').textContent = `🏷️ ${categoryI}`;
 
+      appendLog($('ingest-log'), `🏷️ Category: ${categoryI}`);
       appendLog($('ingest-log'), '🚀 Starting ingestion...');
 
       try {
-        const result = await apiCall('/api/rag/ingest', {});
+        const result = await apiCall('/api/rag/ingest', { category: categoryI });
         ingestJobId = result.job_id;
         startIngestPolling();
       } catch (err) {
@@ -1074,8 +1216,11 @@
       $('ingest-final-stats').innerHTML = `
         <span class="stat-pill">📦 ${data.chunks_created} chunks</span>
         <span class="stat-pill">🔤 ${data.total_tokens.toLocaleString()} tokens</span>
+        ${data.category ? `<span class="stat-pill">🏷️ ${escHtml(data.category)}</span>` : ''}
       `;
       show($('ingest-done'));
+      // Refresh category list so the newly ingested one shows ✅
+      loadCategories('ingest');
     }
 
     function onIngestError(msg) {
@@ -1107,12 +1252,14 @@
     $('btn-ingest-new').addEventListener('click', resetIngestUI);
 
     // ══════════════════════════════════════════════════════════════════
-    // TAB 4: CONFIG
+    // TAB 4 (UI): CONFIG
     // ══════════════════════════════════════════════════════════════════
     async function loadConfig() {
+      const catC = getCategory('config');
       $('config-display').textContent = 'Loading...';
       try {
-        const result = await apiCall('/api/rag/config');
+        const url = catC ? `/api/rag/config?category=${encodeURIComponent(catC)}` : '/api/rag/config';
+        const result = await apiCall(url);
         $('config-display').textContent = JSON.stringify(result, null, 2);
       } catch (err) {
         $('config-display').textContent = 'Error loading config: ' + err;
@@ -1120,8 +1267,6 @@
     }
 
     $('btn-config-refresh').addEventListener('click', loadConfig);
-    // Load config only when the tab is activated (not on page load)
-    document.querySelector('[data-tab="config"]').addEventListener('click', loadConfig);
 
     // ── Utils ────────────────────────────────────────────────────────
     function escHtml(s) {
@@ -1131,6 +1276,9 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
     }
+
+    // ── Init ─────────────────────────────────────────────────────────
+    loadCategories('ingest');
 
   })();
   </script>

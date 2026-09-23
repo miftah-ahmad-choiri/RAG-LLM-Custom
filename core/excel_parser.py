@@ -46,6 +46,22 @@ def _top_index(index: str) -> str:
     return index.split(".")[0]
 
 
+def _read_category_name(wb) -> str:
+    """Read the Category field from the Info sheet (row 1, col B).
+
+    Returns an empty string if the sheet or cell is absent (backwards-compatible
+    with Excel files generated before category support was added).
+    """
+    try:
+        info = wb["Info"]
+        for row in info.iter_rows(min_row=1, max_row=6, values_only=True):
+            if row and str(row[0]).strip().lower() == "category":
+                return str(row[1]).strip() if row[1] else ""
+    except Exception:
+        pass
+    return ""
+
+
 def parse_excel_toc(xlsx_path: Any) -> Dict:
     """
     Parse the TOC Excel file and return structured data.
@@ -55,14 +71,17 @@ def parse_excel_toc(xlsx_path: Any) -> Dict:
 
     Returns:
         Dict with keys:
-          entries  — ordered list of all TOC entries
-          sections — list of top-level sections with child counts
-          total    — total number of entries
+          entries       — ordered list of all TOC entries
+          sections      — list of top-level sections with child counts
+          total         — total number of entries
+          category_name — human-readable label stored in the Info sheet
+          category_slug — filesystem-safe slug derived from category_name
     """
     # Use data_only=False: the workbook was created with HYPERLINK() formulas but no
     # cached values, so data_only=True returns None for the URL column.
     # Instead we read the raw formula string and extract the URL with a regex.
     wb = load_workbook(str(xlsx_path), read_only=True, data_only=False)
+    category_name = _read_category_name(wb)
     ws = wb["TOC"]
 
     entries: List[Dict] = []
@@ -121,8 +140,12 @@ def parse_excel_toc(xlsx_path: Any) -> Dict:
     # Sort by the numeric value of the top-level index (1, 2, 3 … 31)
     sections = sorted(top_map.values(), key=lambda s: int(s["index"]))
 
+    category_slug = slugify(category_name) if category_name else ""
+
     return {
-        "entries":  entries,
-        "sections": sections,
-        "total":    len(entries),
+        "entries":       entries,
+        "sections":      sections,
+        "total":         len(entries),
+        "category_name": category_name,
+        "category_slug": category_slug,
     }

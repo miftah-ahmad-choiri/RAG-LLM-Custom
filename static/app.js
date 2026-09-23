@@ -105,9 +105,11 @@
       }
 
       noExcel.style.display = 'none';
-      excelSelect.innerHTML = files.map(f =>
-        `<option value="${f.name}">${f.name}  (${f.mtime})</option>`
-      ).join('');
+      excelSelect.innerHTML = files.map(f => {
+        // Show category name as the label if present, else fall back to filename
+        const label = f.category_name ? `${f.category_name}  (${f.mtime})` : `${f.name}  (${f.mtime})`;
+        return `<option value="${f.name}">${label}</option>`;
+      }).join('');
 
       // Auto-load info for the first (newest) file
       await loadExcelInfo(files[0].name);
@@ -126,6 +128,9 @@
 
       statTotal.textContent    = `${data.total.toLocaleString()} URLs`;
       statSections.textContent = `${data.section_count} sections`;
+      if (data.category_name) {
+        statTotal.title = `Category: ${data.category_name}`;
+      }
       sourceStats.style.display = '';
 
       // Populate section list

@@ -27,10 +27,11 @@
       font-size: 13.5px;
       font-family: var(--mono);
       color: var(--text);
+      background: var(--surface);
       outline: none;
       transition: border-color .15s;
     }
-    .url-input:focus { border-color: var(--accent); }
+    .url-input:focus { border-color: var(--accent); outline: none; }
     .url-input::placeholder { color: var(--muted); }
 
     /* Preview table */
@@ -146,6 +147,24 @@
         results to a styled Excel file.
       </p>
 
+      <!-- Category name — required, becomes the Excel filename and folder key -->
+      <label style="display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:4px;">
+        🏷️ Category Name <span style="color:#f85149;">*</span>
+        <span style="font-weight:400;color:var(--muted);font-size:11.5px;"> — used as the Excel filename &amp; data folder (e.g. <em>IBM Storage Ceph 9.9.1</em>)</span>
+      </label>
+      <input
+        type="text"
+        id="toc-category"
+        class="url-input"
+        style="margin-bottom:10px;"
+        placeholder="IBM Storage Ceph 9.9.1"
+        spellcheck="false"
+        autocomplete="off"
+      />
+
+      <label style="display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin-bottom:4px;">
+        🌐 IBM Docs URL <span style="color:#f85149;">*</span>
+      </label>
       <div class="url-input-row">
         <input
           type="url"
@@ -321,8 +340,10 @@
 
     // ── Handlers ─────────────────────────────────────────────────
     async function onStart() {
-      const url = $('toc-url').value.trim();
-      if (!url) { alert('Please enter a URL.'); return; }
+      const url          = $('toc-url').value.trim();
+      const categoryName = $('toc-category').value.trim();
+      if (!categoryName) { alert('Please enter a Category Name (e.g. "IBM Storage Ceph 9.9.1").'); $('toc-category').focus(); return; }
+      if (!url) { alert('Please enter a URL.'); $('toc-url').focus(); return; }
 
       // Reset UI
       hide($('error-card'));
@@ -335,13 +356,14 @@
       $('btn-start').disabled = true;
       show($('btn-cancel'));
 
+      logLine(`🏷️  Category: ${categoryName}`);
       logLine(`🚀 Starting TOC scrape for: ${url}`);
 
       try {
         const r = await fetch('/api/toc/scrape', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url }),
+          body: JSON.stringify({ url, category_name: categoryName }),
         });
         const data = await r.json();
         if (data.error) { onError(data.error); return; }
@@ -432,10 +454,9 @@
       currentJobId = null;
     });
 
-    // Allow pressing Enter in the URL input
-    $('toc-url').addEventListener('keydown', e => {
-      if (e.key === 'Enter') onStart();
-    });
+    // Allow pressing Enter in either input
+    $('toc-category').addEventListener('keydown', e => { if (e.key === 'Enter') onStart(); });
+    $('toc-url').addEventListener('keydown', e => { if (e.key === 'Enter') onStart(); });
 
   })();
   </script>

@@ -85,12 +85,13 @@ except ImportError as e:
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024  # 16MB max upload
 
-OUTPUT_DIR      = Path("output")
-OUTPUT_DIR_MD   = OUTPUT_DIR / "md"
-OUTPUT_DIR_HTML = OUTPUT_DIR / "html"
-OUTPUT_DIR_XLS  = OUTPUT_DIR / "excel"
+OUTPUT_DIR         = Path("output")
+OUTPUT_DIR_MD      = OUTPUT_DIR / "md"
+OUTPUT_DIR_HTML    = OUTPUT_DIR / "html"
+OUTPUT_DIR_XLS     = OUTPUT_DIR / "excel"
+OUTPUT_DIR_CHROMA  = OUTPUT_DIR / "chroma_db"
 
-for _d in (OUTPUT_DIR, OUTPUT_DIR_MD, OUTPUT_DIR_HTML, OUTPUT_DIR_XLS):
+for _d in (OUTPUT_DIR, OUTPUT_DIR_MD, OUTPUT_DIR_HTML, OUTPUT_DIR_XLS, OUTPUT_DIR_CHROMA):
     _d.mkdir(parents=True, exist_ok=True)
 
 # ── In-memory job stores ───────────────────────────────────────────────────────
@@ -176,6 +177,8 @@ def _run_scrape_job(job_id: str, excel_file: str, rate_limit: float, resume: boo
         entries = toc["entries"]
         sections = toc["sections"]
         total = len(entries)
+        # Category slug drives the output folder name (fallback to excel stem)
+        category_slug = toc.get("category_slug", "") or Path(excel_file).stem
 
         if total == 0:
             job["status"] = "error"
@@ -188,30 +191,25 @@ def _run_scrape_job(job_id: str, excel_file: str, rate_limit: float, resume: boo
         )
 
         # ── Step 2: Create or resolve session directory ──────────────────────
-        excel_stem = Path(excel_file).stem
-        if excel_stem.endswith("_checked"):
-            excel_stem = excel_stem[:-8]
         if resume:
             if resume_session_dir:
                 session_dir = OUTPUT_DIR_MD / resume_session_dir
             else:
-                # Find latest directory matching *-excel_stem
+                # Find latest directory matching category_slug
                 matching_dirs = sorted(
-                    [d for d in OUTPUT_DIR_MD.iterdir() if d.is_dir() and d.name.endswith(excel_stem)],
+                    [d for d in OUTPUT_DIR_MD.iterdir() if d.is_dir() and d.name == category_slug],
                     key=lambda d: d.name,
                     reverse=True
                 )
                 if matching_dirs:
                     session_dir = matching_dirs[0]
                 else:
-                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                    session_dir = OUTPUT_DIR_MD / f"{timestamp}-{excel_stem}"
+                    session_dir = OUTPUT_DIR_MD / category_slug
             session_dir.mkdir(parents=True, exist_ok=True)
             job["output_dir"] = session_dir.name
             job["log"].append(f"🔄 Resuming session folder: output/md/{session_dir.name}/")
         else:
-            timestamp   = datetime.now().strftime("%Y%m%d_%H%M%S")
-            session_dir = OUTPUT_DIR_MD / f"{timestamp}-{excel_stem}"
+            session_dir = OUTPUT_DIR_MD / category_slug
             session_dir.mkdir(parents=True, exist_ok=True)
             job["output_dir"] = session_dir.name
             job["log"].append(f"📁 Session folder: output/md/{session_dir.name}/")
@@ -366,20 +364,29 @@ def index():
 
 @app.route("/api/excel-files")
 def api_excel_files():
-    """List available TOC Excel files, newest first."""
+    """List available TOC Excel files, newest first, with category metadata."""
     files = sorted(
         OUTPUT_DIR_XLS.glob("*.xlsx"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
-    return jsonify([
-        {
-            "name":  f.name,
-            "mtime": datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
-            "size":  f.stat().st_size,
-        }
-        for f in files
-    ])
+    result = []
+    for f in files:
+        try:
+            toc = parse_excel_toc(f)
+            category_name = toc.get("category_name", "")
+            category_slug = toc.get("category_slug", "")
+        except Exception:
+            category_name = ""
+            category_slug = ""
+        result.append({
+            "name":          f.name,
+            "mtime":         datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M"),
+            "size":          f.stat().st_size,
+            "category_name": category_name,
+            "category_slug": category_slug,
+        })
+    return jsonify(result)
 
 
 @app.route("/api/excel-info")
@@ -399,8 +406,10 @@ def api_excel_info():
         return jsonify({"error": str(exc)}), 500
 
     return jsonify({
-        "total":         toc["total"],
-        "section_count": len(toc["sections"]),
+        "total":          toc["total"],
+        "section_count":  len(toc["sections"]),
+        "category_name":  toc.get("category_name", ""),
+        "category_slug":  toc.get("category_slug", ""),
         "sections": [
             {
                 "index":       s["index"],
@@ -418,21 +427,20 @@ def api_detect_session(excel_file: str):
     excel_file = excel_file.strip()
     if not excel_file:
         return jsonify({"session_dir": None})
-        
-    excel_stem = Path(excel_file).stem
-    if excel_stem.endswith("_checked"):
-        excel_stem = excel_stem[:-8]
-    
+
     try:
-        matching_dirs = sorted(
-            [d.name for d in OUTPUT_DIR_MD.iterdir() if d.is_dir() and d.name.endswith(excel_stem)],
-            reverse=True
-        )
-        if matching_dirs:
-            return jsonify({"session_dir": matching_dirs[0]})
+        toc = parse_excel_toc(OUTPUT_DIR_XLS / excel_file)
+        category_slug = toc.get("category_slug", "") or Path(excel_file).stem
+    except Exception:
+        category_slug = Path(excel_file).stem
+
+    try:
+        session_dir = OUTPUT_DIR_MD / category_slug
+        if session_dir.is_dir():
+            return jsonify({"session_dir": category_slug})
     except Exception as e:
         logger.warning(f"Error listing output directory: {e}")
-        
+
     return jsonify({"session_dir": None})
 
 
@@ -442,36 +450,30 @@ def api_scan_status():
     data = request.get_json(silent=True) or {}
     excel_file = (data.get("excel_file") or "").strip()
     session_dir_name = (data.get("session_dir") or "").strip()
-    
+
     if not excel_file:
         return jsonify({"error": "No Excel file selected."}), 400
-        
+
     excel_path = OUTPUT_DIR_XLS / excel_file
     if not excel_path.exists():
         return jsonify({"error": "Excel file not found."}), 404
-        
-    excel_stem = Path(excel_file).stem
-    if excel_stem.endswith("_checked"):
-        excel_stem = excel_stem[:-8]
+
     if not session_dir_name:
-        # Auto-detect latest
+        # Auto-detect from category slug
         try:
-            matching_dirs = sorted(
-                [d.name for d in OUTPUT_DIR_MD.iterdir() if d.is_dir() and d.name.endswith(excel_stem)],
-                reverse=True
-            )
-            if matching_dirs:
-                session_dir_name = matching_dirs[0]
-            else:
-                return jsonify({
-                    "total": 0,
-                    "clean": 0,
-                    "failed": 0,
-                    "session_dir": None,
-                    "message": "No existing session found."
-                })
+            toc_meta = parse_excel_toc(excel_path)
+            session_dir_name = toc_meta.get("category_slug", "") or Path(excel_file).stem
         except Exception as e:
-            return jsonify({"error": f"Error detecting session: {e}"}), 500
+            return jsonify({"error": f"Error reading Excel: {e}"}), 500
+
+        if not (OUTPUT_DIR_MD / session_dir_name).is_dir():
+            return jsonify({
+                "total": 0,
+                "clean": 0,
+                "failed": 0,
+                "session_dir": None,
+                "message": "No existing session found."
+            })
             
     session_dir = OUTPUT_DIR_MD / session_dir_name
     if not session_dir.exists() or not session_dir.is_dir():
@@ -755,11 +757,11 @@ def docs_view(filename: str):
 
 # ── TOC background worker ─────────────────────────────────────────────────────
 
-def _run_toc_job(job_id: str, url: str):
+def _run_toc_job(job_id: str, url: str, category_name: str = ""):
     """
     Runs in a background thread.
     1. Uses fetch_toc() to open a browser, expand the full sidebar, build indices.
-    2. Writes results to a styled .xlsx file.
+    2. Writes results to a styled .xlsx file named after the category.
     3. Stores entries + skipped list on the job dict.
     """
     job = toc_jobs[job_id]
@@ -770,6 +772,8 @@ def _run_toc_job(job_id: str, url: str):
 
     try:
         job["log"].append(f"🚀 Starting TOC scrape for: {url}")
+        if category_name:
+            job["log"].append(f"🏷️  Category: {category_name}")
 
         if cancel_event.is_set():
             job["status"] = "cancelled"
@@ -790,10 +794,10 @@ def _run_toc_job(job_id: str, url: str):
             job["error"] = "No TOC links were found on the page."
             return
 
-        # Write Excel file
-        timestamp   = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = OUTPUT_DIR_XLS / f"IBM-Ceph-TOC-{timestamp}.xlsx"
-        write_toc_excel(entries, output_file, skipped=skipped)
+        # Write Excel file — named after category slug if available
+        cat_slug    = slugify(category_name) if category_name else "toc"
+        output_file = OUTPUT_DIR_XLS / f"{cat_slug}.xlsx"
+        write_toc_excel(entries, output_file, skipped=skipped, category_name=category_name)
 
         top_level = sum(1 for e in entries if "." not in e["index"])
 
@@ -830,22 +834,59 @@ def _run_toc_job(job_id: str, url: str):
 rag_jobs: Dict[str, Dict[str, Any]] = {}
 rag_job_locks: Dict[str, threading.Event] = {}
 
-# Global RAG components (lazy-loaded)
-_rag_embedding_fn = None
-_rag_collection = None
-_rag_llm_client = None
-_rag_config = None
+# Global RAG components (lazy-loaded, keyed by category_slug)
+_rag_embedding_fn: Dict[str, Any] = {}
+_rag_collection:   Dict[str, Any] = {}
+_rag_llm_client:   Dict[str, Any] = {}
+_rag_base_config = None   # base config loaded once from config.yaml
 
 
-def _load_rag_config(force_reload: bool = False):
-    """Load RAG configuration."""
-    global _rag_config, _rag_llm_client
-    if _rag_config is None or force_reload:
+def _load_rag_base_config(force_reload: bool = False) -> dict:
+    """Load base RAG configuration (provider/model settings only)."""
+    global _rag_base_config
+    if _rag_base_config is None or force_reload:
         config_path = Path("rag_pipeline/config.yaml")
         with open(config_path, "r") as f:
-            _rag_config = yaml.safe_load(f)
-        _rag_llm_client = None  # bust cached LLM client on config reload
-    return _rag_config
+            _rag_base_config = yaml.safe_load(f)
+    return _rag_base_config
+
+
+def _build_category_config(category_slug: str) -> dict:
+    """Build a per-category config by overlaying paths derived from the slug
+    onto the shared base config from config.yaml.
+
+    Paths:
+      md_root      → output/md/<slug>
+      chroma_db    → output/chroma_db/<slug>
+      collection   → <slug>  (ChromaDB collection name)
+
+    The system prompts are left generic when no override is found.
+    """
+    base = _load_rag_base_config()
+    import copy
+    cfg = copy.deepcopy(base)
+    cfg["paths"] = {
+        "md_root":         str(OUTPUT_DIR_MD / category_slug),
+        "chroma_db":       str(OUTPUT_DIR_CHROMA / category_slug),
+        "collection_name": category_slug,
+    }
+    # Replace product-specific wording in system prompts with the category label
+    display_name = category_slug.replace("-", " ").title()
+    for key in ("system", "system_low_confidence"):
+        orig = cfg.get("prompt", {}).get(key, "")
+        if "IBM Storage Ceph" in orig:
+            cfg["prompt"][key] = orig.replace("IBM Storage Ceph 9.9.1", display_name).replace("IBM Storage Ceph", display_name)
+    return cfg
+
+
+def _load_rag_config(category_slug: str = "", force_reload: bool = False) -> dict:
+    """Return the effective config for a given category slug.
+
+    If no slug is given, falls back to the base config (legacy behaviour).
+    """
+    if not category_slug:
+        return _load_rag_base_config(force_reload)
+    return _build_category_config(category_slug)
 
 
 def _make_ollama_embedding_fn(emb_config: dict):
@@ -874,62 +915,64 @@ def _make_ollama_embedding_fn(emb_config: dict):
     return OllamaEmbeddingFunction()
 
 
-def _get_rag_embedding_fn():
-    """Lazy-load embedding function."""
+def _get_rag_embedding_fn(category_slug: str = ""):
+    """Lazy-load embedding function (shared across categories — same model)."""
     global _rag_embedding_fn
-    if _rag_embedding_fn is None:
-        config = _load_rag_config()
+    key = category_slug or "__default__"
+    if key not in _rag_embedding_fn:
+        config = _load_rag_config(category_slug)
         emb_config = config["embeddings"]
-        _rag_embedding_fn = _make_ollama_embedding_fn(emb_config)
-    return _rag_embedding_fn
+        _rag_embedding_fn[key] = _make_ollama_embedding_fn(emb_config)
+    return _rag_embedding_fn[key]
 
 
-def _get_rag_collection():
-    """Lazy-load ChromaDB collection.
+def _get_rag_collection(category_slug: str = ""):
+    """Lazy-load ChromaDB collection for the given category.
 
     Always validates the cached handle is still alive by peeking at it.
     If ChromaDB raises (collection deleted/replaced since last ingest),
     the stale handle is dropped and a fresh one is fetched.
     """
     global _rag_collection
-    if _rag_collection is not None:
-        # Validate the cached handle — the collection UUID may have changed
-        # if ingestion deleted-and-recreated it while the server was running.
-        try:
-            _rag_collection.count()  # lightweight liveness check
-        except Exception:
-            _rag_collection = None  # stale — force re-fetch below
+    key = category_slug or "__default__"
 
-    if _rag_collection is None:
-        config = _load_rag_config()
-        embedding_fn = _get_rag_embedding_fn()
+    if key in _rag_collection:
+        try:
+            _rag_collection[key].count()  # lightweight liveness check
+        except Exception:
+            del _rag_collection[key]  # stale — force re-fetch below
+
+    if key not in _rag_collection:
+        config = _load_rag_config(category_slug)
+        embedding_fn = _get_rag_embedding_fn(category_slug)
         db_path = config["paths"]["chroma_db"]
         Path(db_path).mkdir(parents=True, exist_ok=True)
         client = chromadb.PersistentClient(path=db_path)
         try:
-            _rag_collection = client.get_collection(
+            _rag_collection[key] = client.get_collection(
                 name=config["paths"]["collection_name"],
                 embedding_function=embedding_fn
             )
         except Exception:
             raise RuntimeError(
-                "RAG collection not found. Please run Ingestion first "
-                "(RAG tab → Ingestion → Start Ingestion)."
+                f"RAG collection for '{category_slug or 'default'}' not found. "
+                "Please run Ingestion first (RAG tab → Ingestion → Start Ingestion)."
             )
-    return _rag_collection
+    return _rag_collection[key]
 
 
-def _get_rag_llm_client():
-    """Lazy-load LLM client."""
+def _get_rag_llm_client(category_slug: str = ""):
+    """Lazy-load LLM client (shared model, per-category config)."""
     global _rag_llm_client
-    if _rag_llm_client is None:
-        config = _load_rag_config()
-        _rag_llm_client = get_llm_client(config)
-    return _rag_llm_client
+    key = category_slug or "__default__"
+    if key not in _rag_llm_client:
+        config = _load_rag_config(category_slug)
+        _rag_llm_client[key] = get_llm_client(config)
+    return _rag_llm_client[key]
 
 
-def _run_rag_ingest_job(job_id: str):
-    """Background RAG ingestion job."""
+def _run_rag_ingest_job(job_id: str, category_slug: str = ""):
+    """Background RAG ingestion job for the given category."""
     job = rag_jobs[job_id]
     cancel_event = rag_job_locks[job_id]
 
@@ -938,7 +981,10 @@ def _run_rag_ingest_job(job_id: str):
 
     try:
         job["log"].append("🚀 Starting RAG ingestion...")
-        config = _load_rag_config()
+        config = _load_rag_config(category_slug)
+
+        if category_slug:
+            job["log"].append(f"🏷️  Category: {category_slug}")
 
         # Create Ollama embedding function
         emb_config = config["embeddings"]
@@ -966,13 +1012,13 @@ def _run_rag_ingest_job(job_id: str):
                 "hnsw:M": config["vectordb"].get("hnsw_M", 16)
             }
         )
-        job["log"].append("✅ ChromaDB ready")
+        job["log"].append(f"✅ ChromaDB ready  →  output/chroma_db/{collection_name}/")
 
         # Process markdown files
         job["log"].append("✂️  Chunking documents...")
         chunk_config = config["chunking"]
         md_root = Path(config["paths"]["md_root"])
-        
+
         if not md_root.exists():
             job["status"] = "error"
             job["error"] = f"Markdown root not found: {md_root}"
@@ -1010,7 +1056,9 @@ def _run_rag_ingest_job(job_id: str):
         # Invalidate the cached collection handle so the next query
         # fetches the freshly-created collection (new UUID).
         global _rag_collection
-        _rag_collection = None
+        key = category_slug or "__default__"
+        if key in _rag_collection:
+            del _rag_collection[key]
 
         # Statistics
         total_tokens = sum(c.token_count for c in chunks)
@@ -1033,10 +1081,11 @@ def _rag_search(
     top_k: int = 5,
     chapter_filter: str = None,
     content_type_filter: str = None,
-    topic_tags: List[str] = None
+    topic_tags: List[str] = None,
+    category_slug: str = ""
 ) -> List[Dict[str, Any]]:
-    """Execute vector search."""
-    collection = _get_rag_collection()
+    """Execute vector search against the given category collection."""
+    collection = _get_rag_collection(category_slug)
     
     where = {}
     if chapter_filter:
@@ -1173,7 +1222,8 @@ def _rag_answer(
     chapter_filter: str = None,
     content_type_filter: str = None,
     topic_tags: List[str] = None,
-    show_sources: bool = True
+    show_sources: bool = True,
+    category_slug: str = ""
 ) -> Dict[str, Any]:
     """Full RAG pipeline: retrieve + generate.
 
@@ -1186,8 +1236,8 @@ def _rag_answer(
        stricter low-confidence system prompt so the LLM won't hallucinate.
     6. Keep the top_k survivors for context.
     """
-    config = _load_rag_config()
-    llm_client = _get_rag_llm_client()
+    config = _load_rag_config(category_slug)
+    llm_client = _get_rag_llm_client(category_slug)
     retrieval_cfg = config.get("retrieval", {})
     min_score: float = retrieval_cfg.get("min_score", 0.0)
     low_confidence_threshold: float = retrieval_cfg.get("low_confidence_threshold", 0.72)
@@ -1202,7 +1252,8 @@ def _rag_answer(
         top_k=fetch_k,
         chapter_filter=chapter_filter,
         content_type_filter=content_type_filter,
-        topic_tags=topic_tags
+        topic_tags=topic_tags,
+        category_slug=category_slug
     )
     # Only run the second search if the rewrite actually changed the query
     if search_query.strip().lower() != question.strip().lower():
@@ -1211,7 +1262,8 @@ def _rag_answer(
             top_k=fetch_k,
             chapter_filter=chapter_filter,
             content_type_filter=content_type_filter,
-            topic_tags=topic_tags
+            topic_tags=topic_tags,
+            category_slug=category_slug
         )
         # 3. Merge with RRF
         chunks = _reciprocal_rank_fusion([results_rewritten, results_original])
@@ -1331,9 +1383,12 @@ def api_toc_scrape():
     """Start a TOC scrape job. Returns job_id."""
     data = request.get_json(silent=True) or {}
     url = (data.get("url") or "").strip()
+    category_name = (data.get("category_name") or "").strip()
 
     if not url or not url.startswith("http"):
         return jsonify({"error": "A valid http(s) URL is required."}), 400
+    if not category_name:
+        return jsonify({"error": "A category name is required (e.g. 'IBM Storage Ceph 9.9.1')."}), 400
 
     job_id = str(uuid.uuid4())[:8]
     toc_jobs[job_id] = {
@@ -1342,6 +1397,7 @@ def api_toc_scrape():
         "log": [],
         "output_file": None,
         "output_filename": None,
+        "category_name": category_name,
         "total_entries": 0,
         "top_level": 0,
         "entries": [],
@@ -1353,12 +1409,12 @@ def api_toc_scrape():
 
     thread = threading.Thread(
         target=_run_toc_job,
-        args=(job_id, url),
+        args=(job_id, url, category_name),
         daemon=True,
     )
     thread.start()
 
-    logger.info(f"Started TOC job {job_id} for {url}")
+    logger.info(f"Started TOC job {job_id} for {url} (category={category_name})")
     return jsonify({"job_id": job_id})
 
 
@@ -1423,6 +1479,49 @@ def api_toc_cancel(job_id: str):
 
 # ── RAG Routes ────────────────────────────────────────────────────────────────
 
+@app.route("/api/categories")
+def api_categories():
+    """Return all available categories.
+
+    A category is available if it has a slugged Excel file in output/excel/
+    with a valid category_name stored in the Info sheet.
+    Each entry includes an 'ingested' flag indicating whether a ChromaDB
+    collection folder already exists for that slug.
+    """
+    result = []
+    seen_slugs = set()
+
+    for excel_path in sorted(OUTPUT_DIR_XLS.glob("*.xlsx")):
+        try:
+            toc = parse_excel_toc(excel_path)
+            category_name = toc.get("category_name", "").strip()
+            category_slug = toc.get("category_slug", "").strip()
+        except Exception:
+            continue
+
+        # Only list files that have a proper category_name embedded
+        if not category_name or not category_slug:
+            continue
+        if category_slug in seen_slugs:
+            continue
+        seen_slugs.add(category_slug)
+
+        ingested = (OUTPUT_DIR_CHROMA / category_slug).is_dir()
+        md_ready  = (OUTPUT_DIR_MD / category_slug).is_dir()
+
+        result.append({
+            "slug":          category_slug,
+            "label":         category_name,
+            "ingested":      ingested,
+            "md_ready":      md_ready,
+            "excel_file":    excel_path.name,
+        })
+
+    # Sort: ingested first, then alphabetically
+    result.sort(key=lambda c: (0 if c["ingested"] else 1, c["label"].lower()))
+    return jsonify(result)
+
+
 @app.route("/rag")
 def rag_page():
     """Serve the RAG UI."""
@@ -1433,14 +1532,20 @@ def rag_page():
 
 @app.route("/api/rag/ingest", methods=["POST"])
 def api_rag_ingest():
-    """Start RAG ingestion job. Returns job_id."""
+    """Start RAG ingestion job for a given category. Returns job_id."""
     if not RAG_AVAILABLE:
         return jsonify({"error": "RAG dependencies not available"}), 503
+
+    data = request.get_json(silent=True) or {}
+    category_slug = (data.get("category") or "").strip()
+    if not category_slug:
+        return jsonify({"error": "A category slug is required."}), 400
 
     job_id = str(uuid.uuid4())[:8]
     rag_jobs[job_id] = {
         "id": job_id,
         "status": "running",
+        "category": category_slug,
         "log": [],
         "chunks_created": 0,
         "total_tokens": 0,
@@ -1451,12 +1556,12 @@ def api_rag_ingest():
 
     thread = threading.Thread(
         target=_run_rag_ingest_job,
-        args=(job_id,),
+        args=(job_id, category_slug),
         daemon=True,
     )
     thread.start()
 
-    logger.info(f"Started RAG ingest job {job_id}")
+    logger.info(f"Started RAG ingest job {job_id} (category={category_slug})")
     return jsonify({"job_id": job_id})
 
 
@@ -1476,6 +1581,7 @@ def api_rag_ingest_status(job_id: str):
     return jsonify({
         "id": job["id"],
         "status": job["status"],
+        "category": job.get("category", ""),
         "log": log_snapshot,
         "chunks_created": job.get("chunks_created", 0),
         "total_tokens": job.get("total_tokens", 0),
@@ -1511,9 +1617,12 @@ def api_rag_search():
     chapter_filter = data.get("chapter_filter")
     content_type_filter = data.get("content_type_filter")
     topic_tags = data.get("topic_tags")
+    category_slug = (data.get("category") or "").strip()
 
     if not query:
         return jsonify({"error": "Query is required"}), 400
+    if not category_slug:
+        return jsonify({"error": "A category is required."}), 400
 
     try:
         results = _rag_search(
@@ -1521,7 +1630,8 @@ def api_rag_search():
             top_k=top_k,
             chapter_filter=chapter_filter,
             content_type_filter=content_type_filter,
-            topic_tags=topic_tags
+            topic_tags=topic_tags,
+            category_slug=category_slug
         )
 
         formatted = []
@@ -1534,6 +1644,7 @@ def api_rag_search():
 
         return jsonify({
             "query": query,
+            "category": category_slug,
             "results": formatted,
             "count": len(formatted)
         })
@@ -1556,9 +1667,12 @@ def api_rag_query():
     content_type_filter = data.get("content_type_filter")
     topic_tags = data.get("topic_tags")
     show_sources = data.get("show_sources", True)
+    category_slug = (data.get("category") or "").strip()
 
     if not question:
         return jsonify({"error": "Question is required"}), 400
+    if not category_slug:
+        return jsonify({"error": "A category is required."}), 400
 
     try:
         result = _rag_answer(
@@ -1567,7 +1681,8 @@ def api_rag_query():
             chapter_filter=chapter_filter,
             content_type_filter=content_type_filter,
             topic_tags=topic_tags,
-            show_sources=show_sources
+            show_sources=show_sources,
+            category_slug=category_slug
         )
 
         return jsonify(result)
@@ -1579,13 +1694,15 @@ def api_rag_query():
 
 @app.route("/api/rag/config")
 def api_rag_config():
-    """Get current RAG configuration (sanitized)."""
+    """Get current RAG configuration for a category (sanitized)."""
     if not RAG_AVAILABLE:
         return jsonify({"error": "RAG dependencies not available"}), 503
 
-    config = _load_rag_config(force_reload=True)
+    category_slug = (request.args.get("category") or "").strip()
+    config = _load_rag_config(category_slug, force_reload=True)
     # Return sanitized config (no API keys)
     return jsonify({
+        "category": category_slug,
         "paths": config["paths"],
         "chunking": config["chunking"],
         "embeddings": {k: v for k, v in config["embeddings"].items() if k != "api_key"},

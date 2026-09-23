@@ -61,16 +61,20 @@ def write_toc_excel(
     entries: List[Dict],
     output_path: Path,
     skipped: Optional[List[Dict]] = None,
+    category_name: str = "",
 ) -> Path:
     """
     Write *entries* to *output_path* as a styled .xlsx file.
 
     Args:
-        entries:     List of { index, description, url, depth } dicts.
-        output_path: Where to save the file.
-        skipped:     Optional list of { key, description, reason } dicts from
-                     the scraper. Rows whose description matches a skipped entry
-                     are highlighted amber with a cell comment explaining why.
+        entries:       List of { index, description, url, depth } dicts.
+        output_path:   Where to save the file.
+        skipped:       Optional list of { key, description, reason } dicts from
+                       the scraper. Rows whose description matches a skipped entry
+                       are highlighted amber with a cell comment explaining why.
+        category_name: Human-readable product/version label stored in the Info
+                       sheet so the scraper page can display it (e.g. "IBM Storage
+                       Ceph 9.9.1").
 
     Returns the resolved path.
     """
@@ -173,6 +177,7 @@ def write_toc_excel(
     info = wb.create_sheet("Info")
     info_header_font = Font(name="Calibri", bold=True, size=10)
 
+    info.append(["Category",        category_name or ""])
     info.append(["Generated",       datetime.now().strftime("%Y-%m-%d %H:%M:%S")])
     info.append(["Total entries",   len(entries)])
     info.append(["Top-level",       sum(1 for e in entries if "." not in e["index"])])
