@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IBM Ceph Docs Scraper</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    /* ── Excel file selector ───────────────────────────────────── */
+    .excel-select {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 8px 10px;
+      font-size: 12.5px;
+      font-family: var(--mono);
+      color: var(--text);
+      background: var(--surface);
+      outline: none;
+      cursor: pointer;
+      transition: border-color .15s;
+      margin-bottom: 10px;
+    }
+    .excel-select:focus { border-color: var(--accent); }
+    .excel-select option { font-family: var(--mono); }
+
+    .source-stats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+    .stat-chip {
+      background: #1c2e4a; color: var(--accent-h);
+      font-size: 11px; font-weight: 600;
+      padding: 2px 8px; border-radius: 20px;
+    }
+    .stat-chip.warn { background: #2e2209; color: #d29922; }
+
+    /* ── Section list in sidebar ───────────────────────────────── */
+    .section-list {
+      list-style: none;
+      font-size: 12px;
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 6px;
+    }
+    .section-list li {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+    .section-list .s-idx {
+      font-family: var(--mono);
+      color: var(--muted);
+      font-size: 11px;
+      flex-shrink: 0;
+      width: 26px;
+    }
+    .section-list .s-name { flex: 1; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .section-list .s-cnt { color: var(--muted); font-size: 11px; flex-shrink: 0; }
+
+    /* ── Files-created counter ─────────────────────────────────── */
+    .files-row {
+      display: flex; gap: 12px; flex-wrap: wrap;
+      font-size: 12.5px; color: var(--muted);
+      margin-top: 10px;
+    }
+    .files-row .fc-ok  { color: var(--success); font-weight: 600; }
+    .files-row .fc-err { color: var(--danger);  font-weight: 600; }
+    .files-row .fc-tot { font-weight: 600; color: var(--text); }
+
+    /* ── No-excel placeholder ──────────────────────────────────── */
+    .no-excel {
+      font-size: 12.5px; color: var(--muted);
+      padding: 10px 0;
+    }
+    .no-excel a { color: var(--accent); }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ──────────────────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="header-logo">
+        <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+          <rect width="32" height="32" rx="6" fill="#0f62fe"/>
+          <path d="M8 10h16M8 16h12M8 22h8" stroke="white" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+        <span class="header-title">IBM Ceph Docs Scraper</span>
+      </div>
+      <nav style="display:flex;gap:6px;">
+        <a href="/" class="btn btn-primary" style="padding:5px 14px;font-size:12.5px;text-decoration:none;">⚙️ Scraper</a>
+        <a href="/toc" class="btn btn-secondary" style="padding:5px 14px;font-size:12.5px;text-decoration:none;">📋 TOC</a>
+        <a href="/docs" class="btn btn-secondary" style="padding:5px 14px;font-size:12.5px;text-decoration:none;">📄 Docs</a>
+        <a href="/rag" class="btn btn-secondary" style="padding:5px 14px;font-size:12.5px;text-decoration:none;">🔍 RAG</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ── Main layout ─────────────────────────────────────────────── -->
+  <div class="layout">
+
+    <!-- ── Sidebar ────────────────────────────────────────────────── -->
+    <aside class="sidebar">
+
+      <!-- Source Selection Card -->
+      <div class="card">
+        <div class="card-title">📊 TOC Excel Source</div>
+
+        <!-- Excel file dropdown — populated by JS on load -->
+        <select id="excel-select" class="excel-select">
+          <option value="">Loading files…</option>
+        </select>
+
+        <!-- Stats shown after file is selected -->
+        <div id="source-stats" class="source-stats" style="display:none;">
+          <span class="stat-chip" id="stat-total">– URLs</span>
+          <span class="stat-chip" id="stat-sections">– sections</span>
+        </div>
+
+        <!-- No excel files found -->
+        <div id="no-excel" class="no-excel" style="display:none;">
+          No Excel files found in <code>output/excel/</code>.<br>
+          Run the <a href="/toc">📋 TOC Scraper</a> first to generate one.
+        </div>
+      </div>
+
+      <!-- Section list preview Card -->
+      <div class="card" id="sections-card" style="display:none;">
+        <div class="card-title">📑 Sections</div>
+        <ul class="section-list" id="section-list"></ul>
+      </div>
+
+      <!-- Settings Card -->
+      <div class="card">
+        <div class="card-title">⚙️ Settings</div>
+
+        <div class="setting-info">
+          <span class="setting-label">🌐 Browser mode</span>
+          <span class="badge-count">Visible Chromium</span>
+        </div>
+        <p class="setting-hint">IBM blocks headless browsers. A real Chromium window will open — this is normal.</p>
+
+        <label class="setting-row">
+          <span class="setting-label">Rate limit (seconds)</span>
+          <input type="number" id="rate-limit" class="number-input" value="2.0" min="1.0" max="10" step="0.5" />
+        </label>
+        <p class="setting-hint">Delay between page requests. Min 1s — be polite to IBM servers.</p>
+      </div>
+
+    </aside>
+
+    <!-- ── Main content ─────────────────────────────────────────── -->
+    <main class="main-content">
+
+      <!-- Action card -->
+      <div class="card action-card">
+        <div class="action-header">
+          <div>
+            <div class="card-title">🚀 Start Scraping</div>
+            <p class="action-desc">
+              Fetches every IBM documentation page from the selected Excel TOC and converts
+              each page to a separate, clean Markdown file organised by section.
+            </p>
+          </div>
+          <div class="action-buttons">
+            <button class="btn btn-primary" id="btn-start" disabled>Start Scraping</button>
+            <button class="btn btn-danger hidden" id="btn-stop">⏹ Stop</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Existing Session Scan card -->
+      <div class="card hidden" id="scan-card" style="margin-top: 20px;">
+        <div class="card-title">🔍 Existing Session Detected</div>
+        <p class="action-desc" style="margin-bottom: 12px;">
+          An existing output folder was found for this Excel file: <code id="scan-session-dir"></code>.
+          You can scan this folder to see which files failed or are incomplete, then resume only those!
+        </p>
+        <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+          <button class="btn btn-secondary" id="btn-scan" style="padding: 6px 14px; font-size: 12.5px;">Scan Folder Status</button>
+          <div id="scan-results" class="hidden" style="font-size: 13px; color: var(--text); font-weight: 500;">
+            📈 Scan results: <span style="color: var(--success); font-weight: 600;" id="scan-clean-count">0</span> clean, 
+            <span style="color: var(--danger); font-weight: 600;" id="scan-failed-count">0</span> failed / incomplete.
+          </div>
+        </div>
+        <div class="hidden" id="resume-actions-row" style="margin-top: 15px; border-top: 1px solid var(--border); padding-top: 12px;">
+          <button class="btn btn-primary" id="btn-resume">🔄 Resume Failed Scrapes Only</button>
+          <span style="font-size: 12px; color: var(--muted); margin-left: 8px;">Will only fetch the failed/incomplete pages without touching clean files.</span>
+        </div>
+      </div>
+
+
+      <!-- Progress card -->
+      <div class="card hidden" id="progress-card">
+        <div class="card-title">📊 Progress</div>
+        <div class="progress-meta">
+          <span id="progress-label">0 / 0 pages</span>
+          <span id="progress-pct">0%</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+        </div>
+        <div class="current-url" id="current-url">–</div>
+        <div class="files-row">
+          <span>📁 Files written:</span>
+          <span class="fc-tot" id="fc-total">0</span>
+          <span class="fc-ok"  id="fc-ok">✓ 0</span>
+          <span class="fc-err" id="fc-err">✗ 0</span>
+        </div>
+      </div>
+
+      <!-- Partial download (mid-job) -->
+      <div class="card hidden" id="partial-card">
+        <div class="card-title">💾 Files Being Written…</div>
+        <p class="action-desc" style="margin-bottom:12px;">
+          Output is being written to <code id="partial-dir"></code>. You can download what's been scraped so far.
+        </p>
+        <div class="result-buttons">
+          <button class="btn btn-secondary" id="btn-download-partial">⬇ Download .zip (partial)</button>
+        </div>
+      </div>
+
+      <!-- Result card -->
+      <div class="card hidden" id="result-card">
+        <div class="card-title">✅ Done!</div>
+        <div class="result-meta" id="result-meta"></div>
+        <div class="result-buttons">
+          <button class="btn btn-primary"   id="btn-download">⬇ Download .zip</button>
+          <a href="/docs" class="btn btn-secondary" style="text-decoration:none;">📄 Browse Docs</a>
+          <button class="btn btn-secondary" id="btn-new-job">New Job</button>
+        </div>
+      </div>
+
+      <!-- Error card -->
+      <div class="card card-error hidden" id="error-card">
+        <div class="card-title">❌ Error</div>
+        <pre id="error-msg"></pre>
+      </div>
+
+      <!-- Live log -->
+      <div class="card hidden" id="log-card">
+        <div class="log-header">
+          <div class="card-title">🖥 Live Log</div>
+          <button class="btn-ghost" id="btn-clear-log">Clear</button>
+        </div>
+        <div class="log-terminal" id="log-terminal"></div>
+      </div>
+
+      <!-- Job history -->
+      <div class="card" id="jobs-card">
+        <div class="card-title">🗂 Job History</div>
+        <div id="jobs-list"><span class="muted">No jobs yet.</span></div>
+      </div>
+
+    </main>
+  </div>
+
+  <script src="/static/app.js?v=3"></script>
+</body>
+</html>

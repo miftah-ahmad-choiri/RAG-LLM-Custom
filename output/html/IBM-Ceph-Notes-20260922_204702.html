@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IBM Storage Ceph 9.9.1 — Documentation Notes</title>
+
+  <!-- marked.js — lightweight markdown parser (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@9.1.6/marked.min.js"></script>
+  <!-- highlight.js for code syntax highlighting -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --surface: #f7f8fa;
+      --border: #e5e7eb;
+      --text: #1f2328;
+      --muted: #57606a;
+      --accent: #0f62fe;      /* IBM Blue */
+      --accent-hover: #0043ce;
+      --sidebar-w: 280px;
+      --header-h: 52px;
+    }
+
+    html { font-size: 15px; }
+    body {
+      font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    #header {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      height: var(--header-h);
+      background: #161616;
+      display: flex; align-items: center; gap: 14px;
+      padding: 0 20px;
+      border-bottom: 1px solid #393939;
+    }
+    #header .logo {
+      font-size: 13px; font-weight: 600; color: #f4f4f4;
+      letter-spacing: .04em; white-space: nowrap;
+    }
+    #header .logo span { color: var(--accent); }
+    #header .meta {
+      font-size: 12px; color: #8d8d8d; margin-left: auto; white-space: nowrap;
+    }
+    #hamburger {
+      display: none; background: none; border: none; cursor: pointer;
+      color: #f4f4f4; font-size: 20px; line-height: 1; padding: 4px;
+    }
+
+    /* ── Layout ──────────────────────────────────────────────── */
+    #layout {
+      display: flex;
+      margin-top: var(--header-h);
+      min-height: calc(100vh - var(--header-h));
+    }
+
+    /* ── Sidebar / TOC ───────────────────────────────────────── */
+    #sidebar {
+      width: var(--sidebar-w);
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      position: sticky;
+      top: var(--header-h);
+      height: calc(100vh - var(--header-h));
+      overflow-y: auto;
+      padding: 16px 0 40px;
+    }
+    #toc-title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--muted);
+      padding: 0 16px 10px;
+    }
+    #toc { list-style: none; }
+    #toc li a {
+      display: block;
+      font-size: 13px; color: var(--text);
+      padding: 4px 16px;
+      text-decoration: none;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      border-left: 2px solid transparent;
+      transition: background .12s, border-color .12s;
+    }
+    #toc li a:hover { background: var(--border); }
+    #toc li a.active { border-left-color: var(--accent); color: var(--accent); background: #eff4ff; }
+    #toc li.h2 a { padding-left: 16px; font-weight: 600; }
+    #toc li.h3 a { padding-left: 28px; }
+    #toc li.h4 a { padding-left: 40px; font-size: 12px; color: var(--muted); }
+    #toc li.h5 a { padding-left: 52px; font-size: 11px; color: var(--muted); }
+
+    /* ── Main content ────────────────────────────────────────── */
+    #content-wrap {
+      flex: 1;
+      min-width: 0;
+      padding: 40px 48px 80px;
+      max-width: 900px;
+    }
+
+    /* ── Loading / error states ──────────────────────────────── */
+    #loading {
+      display: flex; align-items: center; gap: 12px;
+      color: var(--muted); padding: 60px 0;
+    }
+    .spinner {
+      width: 20px; height: 20px; border: 2px solid var(--border);
+      border-top-color: var(--accent); border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Markdown rendering ──────────────────────────────────── */
+    #md h1 { font-size: 1.85rem; font-weight: 700; margin: 0 0 6px; line-height: 1.25; }
+    #md h2 { font-size: 1.35rem; font-weight: 700; margin: 2.4rem 0 .6rem; padding-bottom: .35rem; border-bottom: 1px solid var(--border); }
+    #md h3 { font-size: 1.1rem; font-weight: 700; margin: 2rem 0 .5rem; }
+    #md h4 { font-size: 1rem; font-weight: 600; margin: 1.6rem 0 .4rem; }
+    #md h5 { font-size: .9rem; font-weight: 600; margin: 1.4rem 0 .4rem; color: var(--muted); }
+
+    #md p { margin: .7rem 0; }
+    #md ul, #md ol { margin: .6rem 0 .6rem 1.5rem; }
+    #md li { margin: .25rem 0; }
+    #md a { color: var(--accent); text-decoration: none; }
+    #md a:hover { text-decoration: underline; }
+
+    #md blockquote {
+      border-left: 3px solid var(--accent);
+      background: #eff4ff;
+      padding: 10px 16px; margin: 1rem 0;
+      border-radius: 0 4px 4px 0;
+      font-size: .92rem; color: #24396e;
+    }
+
+    #md hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+
+    #md pre {
+      position: relative;
+      background: #161616; color: #f4f4f4;
+      border-radius: 6px; overflow: auto;
+      margin: 1rem 0; font-size: .84rem; line-height: 1.55;
+    }
+    #md pre code {
+      display: block; padding: 16px 20px;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+    #md :not(pre) > code {
+      background: #f0f0f0; color: #c7254e;
+      padding: 1px 5px; border-radius: 3px;
+      font-size: .88em;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+
+    /* Copy button on code blocks */
+    .copy-btn {
+      position: absolute; top: 8px; right: 10px;
+      background: #393939; border: none; border-radius: 3px;
+      color: #c6c6c6; font-size: 11px; padding: 3px 9px; cursor: pointer;
+      opacity: 0; transition: opacity .15s;
+    }
+    #md pre:hover .copy-btn { opacity: 1; }
+    .copy-btn:hover { background: #525252; color: #fff; }
+    .copy-btn.copied { background: #24a148; color: #fff; }
+
+    /* "Copy to clipboard" text lines that appear in the raw md — hide them */
+    #md p:has(> em:only-child) { display: none; }  /* fallback handled in JS */
+
+    /* Tables */
+    #md table {
+      border-collapse: collapse; width: 100%;
+      font-size: .88rem; margin: 1rem 0; overflow-x: auto; display: block;
+    }
+    #md th, #md td {
+      border: 1px solid var(--border); padding: 7px 12px;
+      text-align: left; vertical-align: top;
+    }
+    #md th { background: var(--surface); font-weight: 600; }
+    #md tr:nth-child(even) td { background: #fafafa; }
+
+    /* Definition lists (Last Updated: …) */
+    #md dl { margin: .5rem 0; display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; font-size: .88rem; }
+    #md dt { font-weight: 600; color: var(--muted); }
+    #md dd { margin: 0; }
+
+    /* Source italic lines */
+    #md > div > p > em a { font-size: .82rem; color: var(--muted); }
+
+    /* "Copy to clipboard" plain-text paragraphs — hide */
+    .hide-copy { display: none !important; }
+
+    /* ── Responsive ──────────────────────────────────────────── */
+    @media (max-width: 768px) {
+      #hamburger { display: block; }
+      #sidebar {
+        position: fixed; top: var(--header-h); left: 0; bottom: 0;
+        transform: translateX(-100%); transition: transform .22s ease;
+        z-index: 90;
+      }
+      #sidebar.open { transform: translateX(0); }
+      #content-wrap { padding: 24px 20px 60px; }
+    }
+
+    /* ── Back to top ─────────────────────────────────────────── */
+    #back-top {
+      position: fixed; bottom: 28px; right: 28px;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: 50%; width: 40px; height: 40px;
+      font-size: 18px; cursor: pointer; display: none;
+      align-items: center; justify-content: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+      transition: background .15s;
+    }
+    #back-top:hover { background: var(--accent-hover); }
+    #back-top.visible { display: flex; }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header id="header">
+    <button id="hamburger" aria-label="Toggle menu">&#9776;</button>
+    <div class="logo"><span>IBM</span> Storage Ceph — Documentation Notes</div>
+    <div class="meta" id="header-meta">Loading…</div>
+  </header>
+
+  <!-- Layout -->
+  <div id="layout">
+    <!-- Sidebar TOC -->
+    <aside id="sidebar">
+      <div id="toc-title">Contents</div>
+      <ul id="toc"></ul>
+    </aside>
+
+    <!-- Content -->
+    <main id="content-wrap">
+      <div id="loading">
+        <div class="spinner"></div>
+        <span>Loading markdown…</span>
+      </div>
+      <article id="md"></article>
+    </main>
+  </div>
+
+  <button id="back-top" title="Back to top">&#8679;</button>
+
+  <script>
+    const MD_FILE = 'IBM-Ceph-Notes-20260922_204702.md';
+
+    // ── Configure marked ──────────────────────────────────────
+    marked.setOptions({
+      gfm: true,
+      breaks: false,
+      pedantic: false
+    });
+
+    // Custom renderer — add IDs to headings for TOC anchors
+    const renderer = new marked.Renderer();
+    renderer.heading = function(text, level) {
+      // text may contain HTML tags (marked v9 passes tokens differently)
+      const rawText = typeof text === 'object' ? text.text : text;
+      const clean = rawText.replace(/<[^>]+>/g, '');
+      const id = clean.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').trim();
+      return `<h${level} id="${id}">${rawText}</h${level}>`;
+    };
+    marked.use({ renderer });
+
+    // ── Fetch & render ────────────────────────────────────────
+    fetch(MD_FILE)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.text();
+      })
+      .then(md => {
+        document.getElementById('loading').style.display = 'none';
+        const article = document.getElementById('md');
+
+        // Remove "Copy to clipboard" lines
+        const cleaned = md.replace(/^Copy to clipboard\s*$/gm, '');
+
+        article.innerHTML = marked.parse(cleaned);
+
+        // ── Highlight code blocks ────────────────────────────
+        article.querySelectorAll('pre code').forEach(block => {
+          hljs.highlightElement(block);
+
+          // Add copy button
+          const btn = document.createElement('button');
+          btn.className = 'copy-btn';
+          btn.textContent = 'Copy';
+          block.parentElement.appendChild(btn);
+
+          btn.addEventListener('click', () => {
+            navigator.clipboard.writeText(block.innerText).then(() => {
+              btn.textContent = 'Copied!';
+              btn.classList.add('copied');
+              setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1800);
+            });
+          });
+        });
+
+        // ── Build TOC ────────────────────────────────────────
+        const headings = article.querySelectorAll('h1, h2, h3, h4, h5');
+        const toc = document.getElementById('toc');
+        let h1Count = 0;
+
+        headings.forEach(h => {
+          const level = parseInt(h.tagName[1]);
+          if (level === 1) { h1Count++; if (h1Count > 1) return; } // only first h1
+
+          const li = document.createElement('li');
+          li.className = `h${level}`;
+          const a = document.createElement('a');
+          a.href = `#${h.id}`;
+          a.textContent = h.textContent;
+          li.appendChild(a);
+          toc.appendChild(li);
+        });
+
+        // ── Extract header meta ──────────────────────────────
+        const firstBlockquote = article.querySelector('blockquote');
+        if (firstBlockquote) {
+          const text = firstBlockquote.textContent.trim().split('\n')[0];
+          document.getElementById('header-meta').textContent = text;
+        } else {
+          document.getElementById('header-meta').textContent = 'IBM Storage Ceph 9.9.1';
+        }
+
+        // ── Highlight active TOC link on scroll ──────────────
+        const tocLinks = toc.querySelectorAll('a');
+        const allHeadings = Array.from(article.querySelectorAll('h1,h2,h3,h4,h5'));
+
+        const observer = new IntersectionObserver(entries => {
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              const id = entry.target.id;
+              tocLinks.forEach(a => {
+                a.classList.toggle('active', a.getAttribute('href') === `#${id}`);
+              });
+              // scroll active into toc view
+              const active = toc.querySelector('a.active');
+              if (active) {
+                const sidebar = document.getElementById('sidebar');
+                const top = active.offsetTop - sidebar.offsetHeight / 2;
+                sidebar.scrollTo({ top, behavior: 'smooth' });
+              }
+            }
+          });
+        }, { rootMargin: '-80px 0px -70% 0px', threshold: 0 });
+
+        allHeadings.forEach(h => observer.observe(h));
+      })
+      .catch(err => {
+        document.getElementById('loading').innerHTML =
+          `<span style="color:#da1e28">&#9888; Failed to load <strong>${MD_FILE}</strong>: ${err.message}</span>
+           <br><small style="color:var(--muted);margin-top:6px;display:block">
+           Open this file via a local web server (e.g. <code>python -m http.server</code>)
+           or use VS Code Live Server. Browsers block direct file:// fetches.
+           </small>`;
+      });
+
+    // ── Hamburger (mobile) ────────────────────────────────────
+    document.getElementById('hamburger').addEventListener('click', () => {
+      document.getElementById('sidebar').classList.toggle('open');
+    });
+
+    // ── Back to top ───────────────────────────────────────────
+    const backBtn = document.getElementById('back-top');
+    window.addEventListener('scroll', () => {
+      backBtn.classList.toggle('visible', window.scrollY > 400);
+    });
+    backBtn.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  </script>
+</body>
+</html>

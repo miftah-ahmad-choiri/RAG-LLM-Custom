@@ -1,0 +1,20 @@
+# Core scraper dependencies
+flask>=3.0.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+playwright>=1.44.0
+playwright-stealth>=2.0.0
+lxml>=5.0.0
+markdown>=3.6
+pygments>=2.17.0
+openpyxl>=3.1.0
+
+# RAG dependencies
+chromadb>=0.5.0
+tiktoken>=0.7.0
+numpy>=1.24.0
+pyyaml>=6.0
+tqdm>=4.66.0
+ollama>=0.3.0
+openai>=1.30.0
+python-dotenv>=1.0.0

@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TOC Scraper — IBM Ceph Docs</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    /* ── TOC-page extras ──────────────────────────────────────────── */
+    .toc-layout {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 28px 24px;
+    }
+
+    .url-input-row {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+      margin-bottom: 0;
+    }
+    .url-input {
+      flex: 1;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 9px 13px;
+      font-size: 13.5px;
+      font-family: var(--mono);
+      color: var(--text);
+      outline: none;
+      transition: border-color .15s;
+    }
+    .url-input:focus { border-color: var(--accent); }
+    .url-input::placeholder { color: var(--muted); }
+
+    /* Preview table */
+    .toc-table-wrap {
+      overflow-x: auto;
+      max-height: 480px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      margin-top: 4px;
+    }
+    .toc-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+    .toc-table thead th {
+      position: sticky;
+      top: 0;
+      background: var(--accent);
+      color: #fff;
+      font-weight: 700;
+      padding: 9px 14px;
+      text-align: left;
+      font-size: 11.5px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .toc-table tbody tr:nth-child(even) { background: var(--surface-2); }
+    .toc-table tbody tr:hover { background: #1c2e4a; }
+    .toc-table td {
+      padding: 7px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .toc-table td.col-index {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      color: var(--muted);
+      white-space: nowrap;
+      width: 90px;
+    }
+    .toc-table td.col-desc {
+      font-weight: 400;
+      color: var(--text);
+      min-width: 200px;
+    }
+    .toc-table td.col-url a {
+      color: var(--accent-h);
+      text-decoration: none;
+      font-family: var(--mono);
+      font-size: 11px;
+      word-break: break-all;
+    }
+    .toc-table td.col-url a:hover { text-decoration: underline; }
+
+    /* Depth-based row styles */
+    .toc-row-d0 td.col-desc { font-weight: 700; color: var(--text); }
+    .toc-row-d0 { background: #1c2e4a !important; }
+    .toc-row-d1 { background: #192030 !important; }
+    .toc-row-d1 td.col-desc { padding-left: 26px; }
+    .toc-row-d2 td.col-desc { padding-left: 44px; color: #adbac7; }
+    .toc-row-d3 td.col-desc { padding-left: 62px; color: var(--muted); font-size: 12px; }
+    .toc-row-d4 td.col-desc { padding-left: 80px; color: var(--muted); font-size: 12px; }
+
+    .stat-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 4px;
+    }
+    .stat-pill {
+      background: #1c2e4a;
+      color: var(--accent-h);
+      font-size: 11.5px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="header-logo">
+        <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="32" height="32" rx="6" fill="#0f62fe"/>
+          <path d="M8 10h16M8 16h12M8 22h8" stroke="white" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+        <span class="header-title">IBM Ceph Docs Scraper</span>
+      </div>
+      <nav style="display:flex;gap:6px;">
+        <a href="/" class="btn btn-secondary" style="padding:5px 14px;font-size:12.5px;text-decoration:none;">⚙️ Scraper</a>
+        <a href="/toc" class="btn btn-primary" style="padding:5px 14px;font-size:12.5px;text-decoration:none;">📋 TOC</a>
+        <a href="/docs" class="btn btn-secondary" style="padding:5px 14px;font-size:12.5px;text-decoration:none;">📄 Docs</a>
+         <a href="/rag" class="btn btn-secondary" style="padding:5px 14px;font-size:12.5px;text-decoration:none;">🔍 RAG</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="toc-layout">
+
+    <!-- ── URL Input card ──────────────────────────────────────── -->
+    <div class="card">
+      <div class="card-title">📋 Sidebar TOC Scraper — Export to Excel</div>
+      <p class="action-desc" style="margin-bottom:16px;">
+        Enter any IBM Docs product page URL. The scraper will open the page in a
+        visible Chromium window, extract every link from the left-hand sidebar
+        menu, assign a hierarchical <code>1.x.x</code> index, and export the
+        results to a styled Excel file.
+      </p>
+
+      <div class="url-input-row">
+        <input
+          type="url"
+          id="toc-url"
+          class="url-input"
+          value="https://www.ibm.com/docs/en/storage-ceph/9.9.1"
+          placeholder="https://www.ibm.com/docs/en/storage-ceph/9.9.1"
+          spellcheck="false"
+          autocomplete="off"
+        />
+        <button class="btn btn-primary" id="btn-start">Scrape TOC</button>
+        <button class="btn btn-danger hidden" id="btn-cancel">Cancel</button>
+      </div>
+    </div>
+
+    <!-- ── Progress card ──────────────────────────────────────── -->
+    <div class="card hidden" id="progress-card">
+      <div class="log-header">
+        <div class="card-title">⏳ Scraping…</div>
+        <span id="log-count" style="font-size:11px;color:var(--muted);"></span>
+      </div>
+      <div class="log-terminal" id="log-terminal" style="height:420px;"></div>
+    </div>
+
+    <!-- ── Error card ─────────────────────────────────────────── -->
+    <div class="card card-error hidden" id="error-card">
+      <div class="card-title">❌ Error</div>
+      <pre id="error-msg" style="white-space:pre-wrap;font-size:12.5px;"></pre>
+    </div>
+
+    <!-- ── Result card ────────────────────────────────────────── -->
+    <div class="card hidden" id="result-card">
+      <div class="card-title">✅ Done!</div>
+      <div class="stat-row" id="stat-row"></div>
+      <div class="result-buttons" style="margin-top:14px;">
+        <button class="btn btn-primary" id="btn-download">⬇ Download Excel</button>
+        <button class="btn btn-secondary" id="btn-new">New Scrape</button>
+      </div>
+    </div>
+
+    <!-- ── Skipped sections panel ────────────────────────────── -->
+    <div class="card hidden" id="skipped-card" style="border-color:#5a4200;background:#1e1600;">
+      <div class="card-title" style="color:#d29922;">⚠️ Sections That Could Not Be Expanded</div>
+      <p style="font-size:12.5px;color:#d29922;margin-bottom:12px;">
+        These sections failed to expand after 3 retries. Their sub-topics may be missing from the Excel.
+        Please investigate and re-run if needed.
+      </p>
+      <div class="toc-table-wrap" style="max-height:260px;">
+        <table class="toc-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Section Title</th>
+              <th>Key (toc-node ID)</th>
+              <th>Failure Reason</th>
+            </tr>
+          </thead>
+          <tbody id="skipped-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Preview table ──────────────────────────────────────── -->
+    <div class="card hidden" id="preview-card">
+      <div class="card-title">🗂 TOC Preview</div>
+      <div class="toc-table-wrap">
+        <table class="toc-table">
+          <thead>
+            <tr>
+              <th>Index</th>
+              <th>Description</th>
+              <th>URL</th>
+            </tr>
+          </thead>
+          <tbody id="toc-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /toc-layout -->
+
+  <script>
+  (() => {
+    'use strict';
+
+    const $ = id => document.getElementById(id);
+
+    let currentJobId = null;
+    let pollTimer    = null;
+
+    // ── UI helpers ───────────────────────────────────────────────
+    const show = el => el.classList.remove('hidden');
+    const hide = el => el.classList.add('hidden');
+
+    function logLine(msg) {
+      const t = $('log-terminal');
+      const line = document.createElement('div');
+      // Colour-code based on emoji / keyword prefix
+      if      (msg.includes('✅') || msg.includes('🔗') || msg.includes('📥'))
+                                       line.className = 'log-line-ok';
+      else if (msg.includes('❌') || msg.includes('💥'))
+                                       line.className = 'log-line-err';
+      else if (msg.includes('⚠️') || msg.includes('⟳') || msg.includes('SKIPPED'))
+                                       line.className = 'log-line-warn';
+      else if (msg.includes('🔽') || msg.includes('📊') || msg.includes('🔍'))
+                                       line.className = 'log-line-info';
+      else                             line.className = 'log-line-info';
+      line.textContent = msg;
+      t.appendChild(line);
+      t.scrollTop = t.scrollHeight;
+      // Update running line count in the card header
+      const cnt = $('log-count');
+      if (cnt) cnt.textContent = `${t.children.length} lines`;
+    }
+
+    function depthFromIndex(idx) {
+      return (idx.match(/\./g) || []).length;
+    }
+
+    // ── Build preview table ──────────────────────────────────────
+    function buildTable(entries) {
+      const tbody = $('toc-tbody');
+      tbody.innerHTML = '';
+      entries.forEach(e => {
+        const depth = depthFromIndex(e.index);
+        const tr = document.createElement('tr');
+        tr.className = `toc-row-d${Math.min(depth, 4)}`;
+        tr.innerHTML = `
+          <td class="col-index">${e.index}</td>
+          <td class="col-desc">${escHtml(e.description)}</td>
+          <td class="col-url"><a href="${escHtml(e.url)}" target="_blank" rel="noreferrer">${escHtml(e.url)}</a></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function escHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Poll job status ──────────────────────────────────────────
+    function startPolling(jobId) {
+      pollTimer = setInterval(async () => {
+        try {
+          const r = await fetch(`/api/toc/status/${jobId}`);
+          if (!r.ok) return;
+          const data = await r.json();
+
+          // Append new log lines
+          if (data.log && data.log.length) {
+            data.log.forEach(logLine);
+          }
+
+          if (data.status === 'done') {
+            stopPolling();
+            onDone(data);
+          } else if (data.status === 'error') {
+            stopPolling();
+            onError(data.error || 'Unknown error');
+          } else if (data.status === 'cancelled') {
+            stopPolling();
+            resetUI();
+          }
+        } catch (err) {
+          console.error('Poll error:', err);
+        }
+      }, 1200);
+    }
+
+    function stopPolling() {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+
+    // ── Handlers ─────────────────────────────────────────────────
+    async function onStart() {
+      const url = $('toc-url').value.trim();
+      if (!url) { alert('Please enter a URL.'); return; }
+
+      // Reset UI
+      hide($('error-card'));
+      hide($('result-card'));
+      hide($('preview-card'));
+      $('log-terminal').innerHTML = '';
+      $('toc-tbody').innerHTML = '';
+
+      show($('progress-card'));
+      $('btn-start').disabled = true;
+      show($('btn-cancel'));
+
+      logLine(`🚀 Starting TOC scrape for: ${url}`);
+
+      try {
+        const r = await fetch('/api/toc/scrape', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        });
+        const data = await r.json();
+        if (data.error) { onError(data.error); return; }
+        currentJobId = data.job_id;
+        startPolling(currentJobId);
+      } catch (err) {
+        onError(String(err));
+      }
+    }
+
+    async function onCancel() {
+      if (!currentJobId) return;
+      await fetch(`/api/toc/cancel/${currentJobId}`, { method: 'POST' });
+      stopPolling();
+      resetUI();
+    }
+
+    function onDone(data) {
+      hide($('progress-card'));
+      hide($('btn-cancel'));
+      $('btn-start').disabled = false;
+
+      const skipped = data.skipped || [];
+
+      // Stats
+      const stats = $('stat-row');
+      stats.innerHTML = `
+        <span class="stat-pill">📋 ${data.total_entries} entries</span>
+        <span class="stat-pill">📂 ${data.top_level} top-level sections</span>
+        ${skipped.length ? `<span class="stat-pill" style="background:#2e2209;color:#d29922;">⚠️ ${skipped.length} skipped</span>` : ''}
+        <span class="stat-pill">📄 ${data.filename}</span>
+      `;
+      show($('result-card'));
+
+      // Skipped sections panel
+      if (skipped.length) {
+        const tbody = $('skipped-tbody');
+        tbody.innerHTML = '';
+        skipped.forEach((s, i) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td style="font-family:var(--mono);font-size:11px;color:#d29922;">${i + 1}</td>
+            <td style="font-weight:600;color:#e6a700;">${escHtml(s.description)}</td>
+            <td style="font-family:var(--mono);font-size:11px;color:var(--muted);">${escHtml(s.key)}</td>
+            <td style="font-size:11.5px;color:#d29922;">${escHtml(s.reason)}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+        show($('skipped-card'));
+      }
+
+      // Preview table
+      if (data.entries && data.entries.length) {
+        buildTable(data.entries);
+        show($('preview-card'));
+      }
+
+      $('btn-download').onclick = () => {
+        window.location = `/api/toc/download/${currentJobId}`;
+      };
+    }
+
+    function onError(msg) {
+      hide($('progress-card'));
+      hide($('btn-cancel'));
+      $('btn-start').disabled = false;
+      $('error-msg').textContent = msg;
+      show($('error-card'));
+    }
+
+    function resetUI() {
+      hide($('progress-card'));
+      hide($('btn-cancel'));
+      $('btn-start').disabled = false;
+      currentJobId = null;
+    }
+
+    // ── Wire buttons ─────────────────────────────────────────────
+    $('btn-start').addEventListener('click', onStart);
+    $('btn-cancel').addEventListener('click', onCancel);
+    $('btn-new').addEventListener('click', () => {
+      hide($('result-card'));
+      hide($('preview-card'));
+      hide($('skipped-card'));
+      hide($('error-card'));
+      $('log-terminal').innerHTML = '';
+      $('skipped-tbody').innerHTML = '';
+      currentJobId = null;
+    });
+
+    // Allow pressing Enter in the URL input
+    $('toc-url').addEventListener('keydown', e => {
+      if (e.key === 'Enter') onStart();
+    });
+
+  })();
+  </script>
+
+</body>
+</html>

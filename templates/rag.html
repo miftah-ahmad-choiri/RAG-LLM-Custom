@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAG — IBM Ceph Docs</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    /* ── RAG-page styles ────────────────────────────────────────────── */
+    .rag-layout {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 24px;
+    }
+
+    .rag-tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid var(--border);
+    }
+    .rag-tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 13px;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.15s;
+    }
+    .rag-tab:hover { color: var(--text); }
+    .rag-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    .rag-panel { display: none; }
+    .rag-panel.active { display: block; }
+
+    .card-title { font-size: 16px; font-weight: 700; margin-bottom: 16px; }
+    .action-desc { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+      margin-bottom: 16px;
+    }
+    .query-input {
+      flex: 1;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: 14px;
+      font-family: var(--mono);
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .query-input:focus { border-color: var(--accent); }
+    /* Inline validation error under an input */
+    .input-error {
+      color: #f85149;
+      font-size: 12px;
+      margin-top: -10px;
+      margin-bottom: 10px;
+      display: none;
+    }
+    .input-error.visible { display: block; }
+    .query-input.invalid { border-color: #f85149; }
+
+    .filters-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+      padding: 12px;
+      background: var(--surface);
+      border-radius: 6px;
+      font-size: 12px;
+    }
+    .filter-group { display: flex; align-items: center; gap: 6px; }
+    .filter-label {
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      cursor: default;
+    }
+    .filter-select, .filter-input {
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-family: var(--mono);
+      background: var(--bg);
+      color: var(--text);
+      outline: none;
+    }
+    .filter-select:focus, .filter-input:focus { border-color: var(--accent); }
+
+    .log-terminal {
+      background: #010409;
+      color: #e6edf3;
+      border: 1px solid var(--border);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.5;
+      padding: 16px;
+      border-radius: 6px;
+      overflow: auto;
+      max-height: 420px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .log-line-ok { color: #7ee787; }
+    .log-line-err { color: #f85149; }
+    .log-line-warn { color: #d2a8ff; }
+    .log-line-info { color: #79c0ff; }
+
+    .stat-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .stat-pill {
+      background: var(--surface);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+    }
+
+    /* Answer area (not a nested card — just spacing inside the outer card) */
+    .answer-area {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .answer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .answer-title { font-weight: 700; font-size: 14px; }
+    .answer-meta { color: var(--muted); font-size: 11px; }
+
+    /* Markdown-rendered answer body */
+    .answer-text {
+      line-height: 1.8;
+      font-size: 13.5px;
+      color: var(--text);
+    }
+    .answer-text p { margin: 0 0 12px; }
+    .answer-text p:last-child { margin-bottom: 0; }
+    .answer-text h1, .answer-text h2, .answer-text h3, .answer-text h4 {
+      font-weight: 700;
+      margin: 18px 0 8px;
+      color: var(--text);
+      line-height: 1.3;
+    }
+    .answer-text h1 { font-size: 17px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    .answer-text h2 { font-size: 15px; }
+    .answer-text h3 { font-size: 13.5px; }
+    .answer-text ul, .answer-text ol {
+      margin: 8px 0 12px 20px;
+      padding: 0;
+    }
+    .answer-text li { margin-bottom: 5px; }
+    .answer-text li > ul, .answer-text li > ol { margin-top: 4px; margin-bottom: 4px; }
+    .answer-text code {
+      background: var(--surface-2);
+      color: #79c0ff;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+    }
+    .answer-text pre {
+      position: relative;
+      background: #010409;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px 16px;
+      overflow-x: auto;
+      margin: 10px 0 14px;
+    }
+    .answer-text pre code {
+      background: transparent;
+      color: #e6edf3;
+      padding: 0;
+      font-size: 12.5px;
+      line-height: 1.6;
+    }
+    .answer-text blockquote {
+      border-left: 3px solid var(--accent);
+      margin: 10px 0;
+      padding: 8px 14px;
+      background: var(--surface-2);
+      border-radius: 0 6px 6px 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .answer-text table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 12px 0;
+      font-size: 12.5px;
+    }
+    .answer-text th {
+      background: var(--surface-2);
+      font-weight: 700;
+      text-align: left;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+    }
+    .answer-text td {
+      padding: 7px 12px;
+      border: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .answer-text strong { color: var(--text); font-weight: 700; }
+    .answer-text em { color: var(--muted); font-style: italic; }
+    .answer-text hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
+    .answer-text a { color: var(--accent); text-decoration: none; }
+    .answer-text a:hover { text-decoration: underline; }
+
+    /* Sources */
+    .sources-section {
+      margin-top: 20px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+    .sources-title { font-weight: 700; font-size: 13px; margin-bottom: 10px; }
+    .source-item {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      font-size: 12px;
+      transition: border-color 0.15s;
+    }
+    .source-item:hover { border-color: var(--accent); }
+    .source-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 5px;
+      gap: 8px;
+    }
+    .source-file-link {
+      color: var(--accent);
+      font-family: var(--mono);
+      font-size: 11.5px;
+      font-weight: 600;
+      text-decoration: none;
+      word-break: break-all;
+    }
+    .source-file-link:hover { text-decoration: underline; color: var(--accent-h); }
+    .source-badges {
+      display: flex;
+      gap: 5px;
+      flex-shrink: 0;
+      align-items: center;
+    }
+    .source-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    .source-badge-score {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: rgba(56,139,253,0.08);
+    }
+    .source-path { color: var(--muted); font-size: 11px; margin-bottom: 7px; }
+    .source-snippet {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.55;
+      margin-top: 6px;
+    }
+    .source-snippet mark {
+      background: rgba(56,139,253,0.22);
+      color: var(--text);
+      border-radius: 2px;
+      padding: 0 2px;
+      font-weight: 600;
+    }
+    .source-links {
+      display: flex;
+      gap: 10px;
+      margin-top: 8px;
+      padding-top: 7px;
+      border-top: 1px solid var(--border);
+    }
+    .source-ext-link {
+      font-size: 11px;
+      color: var(--accent);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .source-ext-link:hover { text-decoration: underline; }
+
+    /* Search results table */
+    .results-table-wrap {
+      overflow-x: auto;
+      max-height: 500px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .results-table thead th {
+      position: sticky;
+      top: 0;
+      background: var(--surface);
+      color: var(--text);
+      font-weight: 700;
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      border-bottom: 2px solid var(--border);
+    }
+    .results-table tbody tr:nth-child(even) { background: var(--surface); }
+    .results-table tbody tr:hover { background: #1c2e4a; }
+    .results-table td {
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .results-table td.col-score {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent);
+      width: 70px;
+      white-space: nowrap;
+    }
+    .results-table td.col-file {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      width: 220px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .results-table td.col-text {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text);
+      max-width: 400px;
+    }
+    .results-table td.col-meta {
+      font-size: 10px;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .hidden { display: none !important; }
+
+    .btn { padding: 10px 20px; font-size: 13px; font-weight: 600; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* Config display */
+    .config-display {
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 16px;
+      border-radius: 6px;
+      max-height: 400px;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+
+    /* Nav links in header */
+    .nav-link {
+      padding: 5px 14px;
+      font-size: 12.5px;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header ─────────────────────────────────────────────────── -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="header-logo">
+        <svg width="28" height="28" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect width="32" height="32" rx="6" fill="#0f62fe"/>
+          <path d="M8 10h16M8 16h12M8 22h8" stroke="white" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+        <span class="header-title">IBM Ceph Docs RAG</span>
+      </div>
+      <nav style="display:flex;gap:6px;">
+        <a href="/" class="btn btn-secondary nav-link">⚙️ Scraper</a>
+        <a href="/toc" class="btn btn-secondary nav-link">📋 TOC</a>
+        <a href="/docs" class="btn btn-secondary nav-link">📄 Docs</a>
+        <a href="/toc-index" class="btn btn-secondary nav-link">📑 TOC Index</a>
+        <a href="/rag" class="btn btn-primary nav-link">🤖 RAG</a>
+      </nav>
+    </div>
+  </header>
+
+  <div class="rag-layout">
+
+    <!-- ── Tabs ───────────────────────────────────────────────────── -->
+    <div class="rag-tabs">
+      <button class="rag-tab active" data-tab="query">💬 Query (RAG)</button>
+      <button class="rag-tab" data-tab="search">🔍 Search Only</button>
+      <button class="rag-tab" data-tab="ingest">📥 Ingestion</button>
+      <button class="rag-tab" data-tab="config">⚙️ Config</button>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB 1: QUERY (Full RAG)
+         ══════════════════════════════════════════════════════════════════ -->
+    <div class="rag-panel active" id="tab-query">
+      <div class="card">
+        <div class="card-title">💬 Ask IBM Ceph Expert</div>
+        <p class="action-desc">
+          Full RAG pipeline: semantic search + LLM generation. Supports Ollama (local), GPT-4o, GPT-4o-mini.
+        </p>
+
+        <div class="input-row">
+          <textarea
+            id="query-input"
+            class="query-input"
+            rows="3"
+            placeholder="Ask anything about IBM Storage Ceph... e.g., 'How to create erasure coded pool?' or 'Why are my PGs degraded?'"
+            spellcheck="false"
+            aria-label="Question"
+          ></textarea>
+        </div>
+        <p class="input-error" id="query-input-error">Please enter a question.</p>
+
+        <div class="filters-row">
+          <div class="filter-group">
+            <label class="filter-label" for="query-topk">Top-K</label>
+            <input type="number" id="query-topk" class="filter-input" value="8" min="1" max="20" style="width:60px;">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" for="query-chapter">Chapter</label>
+            <select id="query-chapter" class="filter-select"></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" for="query-type">Type</label>
+            <select id="query-type" class="filter-select"></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" for="query-tags">Tags</label>
+            <input type="text" id="query-tags" class="filter-input" placeholder="crush,osd,ssd" style="width:180px;">
+          </div>
+          <div class="filter-group">
+            <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+              <input type="checkbox" id="query-sources" checked>
+              <span class="filter-label" style="text-transform:none;">Show Sources</span>
+            </label>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-primary" id="btn-query">🚀 Ask</button>
+          <button class="btn btn-secondary" id="btn-query-clear">Clear</button>
+        </div>
+
+        <!-- Answer area (inside the same card, separated by a border) -->
+        <div class="answer-area hidden" id="answer-card">
+          <div class="answer-header">
+            <span class="answer-title">🤖 Answer</span>
+            <span class="answer-meta" id="answer-meta"></span>
+          </div>
+          <!-- Low-confidence warning banner -->
+          <div class="hidden" id="low-confidence-banner" style="
+            background: rgba(210,153,34,0.12);
+            border: 1px solid #d29922;
+            border-radius: 6px;
+            padding: 8px 14px;
+            margin-bottom: 14px;
+            font-size: 12px;
+            color: #d29922;
+          ">
+            ⚠️ <strong>Low confidence</strong> — retrieved sources scored below the relevance threshold.
+            The answer may be incomplete or imprecise. Best score: <span id="best-score-badge"></span>
+          </div>
+          <div class="answer-text" id="answer-text"></div>
+
+          <!-- Sources -->
+          <div class="sources-section hidden" id="sources-section">
+            <div class="sources-title">📚 Sources (<span id="sources-count">0</span> chunks)</div>
+            <div id="sources-list"></div>
+          </div>
+        </div>
+
+        <!-- Error card -->
+        <div class="card card-error hidden" id="query-error-card">
+          <div class="card-title">❌ Error</div>
+          <pre id="query-error-msg" style="white-space:pre-wrap;font-size:12.5px;"></pre>
+        </div>
+
+        <!-- Loading -->
+        <div class="card hidden" id="query-loading">
+          <div class="log-header">
+            <div class="card-title">🔍 Searching &amp; Generating…</div>
+          </div>
+          <div class="log-terminal" id="query-log" style="height:120px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB 2: SEARCH ONLY (Semantic Search)
+         ══════════════════════════════════════════════════════════════════ -->
+    <div class="rag-panel" id="tab-search">
+      <div class="card">
+        <div class="card-title">🔍 Semantic Search</div>
+        <p class="action-desc">
+          Vector similarity search only — no LLM. Use to test retrieval quality and find relevant sections.
+        </p>
+
+        <div class="input-row">
+          <input
+            type="text"
+            id="search-input"
+            class="query-input"
+            placeholder="Search query... e.g., 'device class ssd' or 'crush rule erasure'"
+            spellcheck="false"
+            aria-label="Search query"
+          />
+        </div>
+        <p class="input-error" id="search-input-error">Please enter a search query.</p>
+
+        <div class="filters-row">
+          <div class="filter-group">
+            <label class="filter-label" for="search-topk">Top-K</label>
+            <input type="number" id="search-topk" class="filter-input" value="10" min="1" max="50" style="width:60px;">
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" for="search-chapter">Chapter</label>
+            <select id="search-chapter" class="filter-select"></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" for="search-type">Type</label>
+            <select id="search-type" class="filter-select"></select>
+          </div>
+          <div class="filter-group">
+            <label class="filter-label" for="search-tags">Tags</label>
+            <input type="text" id="search-tags" class="filter-input" placeholder="crush,osd,ssd" style="width:180px;">
+          </div>
+        </div>
+
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-primary" id="btn-search">🔍 Search</button>
+          <button class="btn btn-secondary" id="btn-search-clear">Clear</button>
+        </div>
+
+        <!-- Results table -->
+        <div class="card hidden" id="search-results-card">
+          <div class="card-title">📋 Results (<span id="search-count">0</span>)</div>
+          <div class="results-table-wrap">
+            <table class="results-table">
+              <thead>
+                <tr>
+                  <th>Score</th>
+                  <th>File</th>
+                  <th>Chapter</th>
+                  <th>Type</th>
+                  <th>Preview</th>
+                </tr>
+              </thead>
+              <tbody id="search-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card card-error hidden" id="search-error-card">
+          <div class="card-title">❌ Error</div>
+          <pre id="search-error-msg" style="white-space:pre-wrap;font-size:12.5px;"></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB 3: INGESTION
+         ══════════════════════════════════════════════════════════════════ -->
+    <div class="rag-panel" id="tab-ingest">
+      <div class="card">
+        <div class="card-title">📥 RAG Ingestion</div>
+        <p class="action-desc">
+          One-time setup: processes all markdown files, creates chunks, generates embeddings on GPU, stores in ChromaDB.
+          Run this once after scraping completes. Takes ~30 seconds on RTX 5070 Ti.
+        </p>
+
+        <div style="display:flex;gap:10px;margin-bottom:16px;">
+          <button class="btn btn-primary" id="btn-ingest">▶ Start Ingestion</button>
+          <button class="btn btn-danger hidden" id="btn-ingest-cancel">Cancel</button>
+        </div>
+
+        <div class="stat-row" id="ingest-stats"></div>
+
+        <div class="card hidden" id="ingest-progress">
+          <div class="log-header">
+            <div class="card-title">⏳ Ingestion Progress</div>
+            <span id="ingest-log-count" style="font-size:11px;color:var(--muted);"></span>
+          </div>
+          <div class="log-terminal" id="ingest-log" style="height:420px;"></div>
+        </div>
+
+        <div class="card card-error hidden" id="ingest-error-card">
+          <div class="card-title">❌ Error</div>
+          <pre id="ingest-error-msg" style="white-space:pre-wrap;font-size:12.5px;"></pre>
+        </div>
+
+        <div class="card hidden" id="ingest-done">
+          <div class="card-title">✅ Ingestion Complete</div>
+          <div class="stat-row" id="ingest-final-stats"></div>
+          <button class="btn btn-secondary" id="btn-ingest-new" style="margin-top:12px;">New Ingestion</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TAB 4: CONFIG
+         ══════════════════════════════════════════════════════════════════ -->
+    <div class="rag-panel" id="tab-config">
+      <div class="card">
+        <div class="card-title">⚙️ Current Configuration</div>
+        <p class="action-desc">Live configuration from config.yaml (API keys redacted).</p>
+        <button class="btn btn-secondary" id="btn-config-refresh" style="margin-bottom:16px;">🔄 Refresh</button>
+        <pre class="config-display" id="config-display">Click Refresh to load configuration.</pre>
+      </div>
+    </div>
+
+  </div><!-- /rag-layout -->
+
+  <script src="/static/marked.min.js"></script>
+  <script>
+  (() => {
+    'use strict';
+
+    // Configure marked for safe rendering
+    marked.setOptions({
+      breaks: true,       // treat single newlines as <br>
+      gfm: true,          // GitHub Flavoured Markdown
+    });
+
+    function renderMarkdown(text) {
+      try { return marked.parse(text); }
+      catch (e) { return `<pre>${escHtml(text)}</pre>`; }
+    }
+
+    const $ = id => document.getElementById(id);
+    const hide = el => el.classList.add('hidden');
+    const show = el => el.classList.remove('hidden');
+
+    // ── Populate chapter/type selects from a single source of truth ─
+    const CHAPTERS = [
+      '10-overview', '11-planning', '12-installing', '13-upgrading',
+      '14-configuring', '15-edge-clusters', '16-administering', '17-dashboard',
+      '18-ceph-object-gateway', '19-ceph-file-protocol-services',
+      '20-ceph-file-systems', '21-ceph-block-devices',
+      '22-ceph-block-devices-and-openstack', '23-ceph-nvme-of-gateway',
+      '24-developer', '25-troubleshooting',
+    ];
+    const TYPES = ['procedure', 'concept', 'reference', 'troubleshooting'];
+
+    function fillSelect(id, values) {
+      const sel = $(id);
+      sel.innerHTML = '<option value="">All</option>';
+      values.forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        sel.appendChild(opt);
+      });
+    }
+
+    fillSelect('query-chapter', CHAPTERS);
+    fillSelect('query-type', TYPES);
+    fillSelect('search-chapter', CHAPTERS);
+    fillSelect('search-type', TYPES);
+
+    // ── Tab switching ───────────────────────────────────────────────
+    document.querySelectorAll('.rag-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.rag-tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.rag-panel').forEach(p => p.classList.remove('active'));
+        tab.classList.add('active');
+        const panelId = 'tab-' + tab.dataset.tab;
+        $(panelId).classList.add('active');
+      });
+    });
+
+    // ── Helper: API call ────────────────────────────────────────────
+    // GET when data is null (no Content-Type header); POST with JSON body otherwise.
+    async function apiCall(endpoint, data = null, signal = null) {
+      const opts = { signal };
+      if (data !== null) {
+        opts.method = 'POST';
+        opts.headers = { 'Content-Type': 'application/json' };
+        opts.body = JSON.stringify(data);
+      }
+      const r = await fetch(endpoint, opts);
+      const json = await r.json();
+      if (!r.ok) throw new Error(json.error || `HTTP ${r.status}`);
+      return json;
+    }
+
+    // ── Helper: Log line ────────────────────────────────────────────
+    function appendLog(container, msg) {
+      const line = document.createElement('div');
+      if (msg.includes('✅') || msg.includes('🔗') || msg.includes('📥'))
+        line.className = 'log-line-ok';
+      else if (msg.includes('❌') || msg.includes('💥'))
+        line.className = 'log-line-err';
+      else if (msg.includes('⚠️') || msg.includes('⟳') || msg.includes('SKIPPED'))
+        line.className = 'log-line-warn';
+      else
+        line.className = 'log-line-info';
+      line.textContent = msg;
+      container.appendChild(line);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // ── Helper: inline validation ───────────────────────────────────
+    function showInputError(inputId, errorId) {
+      $(inputId).classList.add('invalid');
+      $(errorId).classList.add('visible');
+    }
+    function clearInputError(inputId, errorId) {
+      $(inputId).classList.remove('invalid');
+      $(errorId).classList.remove('visible');
+    }
+
+    // ── Helper: safe URL (prevent javascript: injection) ────────────
+    function safeUrl(url) {
+      try {
+        const u = new URL(url);
+        return (u.protocol === 'https:' || u.protocol === 'http:') ? url : null;
+      } catch (_) { return null; }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // TAB 1: QUERY (Full RAG)
+    // ══════════════════════════════════════════════════════════════════
+    let queryAbortController = null;
+
+    async function runQuery() {
+      const question = $('query-input').value.trim();
+      if (!question) {
+        showInputError('query-input', 'query-input-error');
+        return;
+      }
+      clearInputError('query-input', 'query-input-error');
+
+      // Clear previous result before showing loader
+      $('answer-text').innerHTML = '';
+      $('answer-meta').textContent = '';
+      $('sources-list').innerHTML = '';
+      hide($('answer-card'));
+      hide($('sources-section'));
+      hide($('query-error-card'));
+      show($('query-loading'));
+      $('query-log').innerHTML = '';
+      $('btn-query').disabled = true;
+      $('btn-query').textContent = '⏳ Processing...';
+
+      // Abort any prior in-flight request
+      if (queryAbortController) queryAbortController.abort();
+      queryAbortController = new AbortController();
+
+      appendLog($('query-log'), '🔍 Searching documentation...');
+
+      try {
+        const data = {
+          question,
+          top_k: parseInt($('query-topk').value) || 5,
+          chapter_filter: $('query-chapter').value || null,
+          content_type_filter: $('query-type').value || null,
+          topic_tags: $('query-tags').value.split(',').map(t => t.trim()).filter(t => t),
+          show_sources: $('query-sources').checked
+        };
+
+        appendLog($('query-log'), '🤖 Generating answer...');
+        const result = await apiCall('/api/rag/query', data, queryAbortController.signal);
+
+        hide($('query-loading'));
+
+        // Display answer — render as markdown
+        $('answer-text').innerHTML = renderMarkdown(result.answer);
+        const metaParts = [];
+        if (result.chunks_retrieved) metaParts.push(`${result.chunks_retrieved} chunks`);
+        if (result.search_query) metaParts.push(`searched: "${result.search_query}"`);
+        if (result.best_score != null) metaParts.push(`best score: ${result.best_score}`);
+        $('answer-meta').textContent = metaParts.join(' | ');
+
+        // Show/hide low-confidence warning
+        if (result.low_confidence) {
+          $('best-score-badge').textContent = result.best_score;
+          show($('low-confidence-banner'));
+        } else {
+          hide($('low-confidence-banner'));
+        }
+
+        show($('answer-card'));
+
+        // Display sources
+        if (data.show_sources && result.sources && result.sources.length) {
+          $('sources-count').textContent = result.sources.length;
+          const list = $('sources-list');
+          list.innerHTML = '';
+          // Build keyword set from the rewritten search query for highlighting
+          const keywords = (result.search_query || question)
+            .toLowerCase()
+            .split(/\s+/)
+            .filter(w => w.length > 3);
+
+          result.sources.forEach((src, i) => {
+            // Build local viewer URL
+            const filePath = (src.file || '').replace(/\\/g, '/');
+            const fullPath = result.md_root ? `${result.md_root}/${filePath}` : filePath;
+            const localUrl = `/docs/${fullPath.split('/').map(encodeURIComponent).join('/')}`;
+
+            // Highlight keywords in snippet
+            let snippet = escHtml(src.snippet || '');
+            if (snippet && keywords.length) {
+              keywords.forEach(kw => {
+                const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                snippet = snippet.replace(new RegExp(`(${escaped})`, 'gi'), '<mark>$1</mark>');
+              });
+            }
+
+            // Score colour: green ≥ 0.75, yellow ≥ 0.65, default otherwise
+            const score = src.score;
+            const scoreClass = score >= 0.75
+              ? 'style="color:#3fb950;border-color:#3fb950;background:rgba(63,185,80,0.08)"'
+              : score >= 0.65
+                ? 'style="color:#d29922;border-color:#d29922;background:rgba(210,153,34,0.08)"'
+                : '';
+
+            // Validate external URL before rendering
+            const extUrl = src.source_url ? safeUrl(src.source_url) : null;
+
+            const div = document.createElement('div');
+            div.className = 'source-item';
+            div.innerHTML = `
+              <div class="source-header">
+                <a class="source-file-link" href="${localUrl}" target="_blank" rel="noopener">
+                  ${i + 1}. ${escHtml(src.file)}
+                </a>
+                <div class="source-badges">
+                  ${src.content_type ? `<span class="source-badge">${escHtml(src.content_type)}</span>` : ''}
+                  <span class="source-badge source-badge-score" ${scoreClass}>▲ ${score.toFixed(3)}</span>
+                </div>
+              </div>
+              <div class="source-path">${escHtml(src.section || '')}</div>
+              ${snippet ? `<div class="source-snippet">${snippet}</div>` : ''}
+              <div class="source-links">
+                <a class="source-ext-link" href="${localUrl}" target="_blank" rel="noopener">
+                  📄 View in Docs
+                </a>
+                ${extUrl ? `<a class="source-ext-link" href="${escHtml(extUrl)}" target="_blank" rel="noopener">🌐 IBM Docs ↗</a>` : ''}
+              </div>
+            `;
+            list.appendChild(div);
+          });
+          show($('sources-section'));
+        } else {
+          hide($('sources-section'));
+        }
+
+      } catch (err) {
+        if (err.name === 'AbortError') return; // intentional abort — do nothing
+        hide($('query-loading'));
+        $('query-error-msg').textContent = String(err);
+        show($('query-error-card'));
+      } finally {
+        $('btn-query').disabled = false;
+        $('btn-query').textContent = '🚀 Ask';
+      }
+    }
+
+    $('btn-query').addEventListener('click', runQuery);
+    $('btn-query-clear').addEventListener('click', () => {
+      $('query-input').value = '';
+      clearInputError('query-input', 'query-input-error');
+      hide($('answer-card'));
+      hide($('low-confidence-banner'));
+      hide($('query-error-card'));
+      $('query-topk').value = '8';
+      $('query-chapter').value = '';
+      $('query-type').value = '';
+      $('query-tags').value = '';
+      $('query-sources').checked = true;
+    });
+    $('query-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); runQuery(); }
+    });
+    $('query-input').addEventListener('input', () => {
+      if ($('query-input').value.trim()) clearInputError('query-input', 'query-input-error');
+    });
+
+    // ══════════════════════════════════════════════════════════════════
+    // TAB 2: SEARCH ONLY
+    // ══════════════════════════════════════════════════════════════════
+    async function runSearch() {
+      const query = $('search-input').value.trim();
+      if (!query) {
+        showInputError('search-input', 'search-input-error');
+        return;
+      }
+      clearInputError('search-input', 'search-input-error');
+
+      hide($('search-results-card'));
+      hide($('search-error-card'));
+      $('btn-search').disabled = true;
+      $('btn-search').textContent = '⏳ Searching...';
+
+      try {
+        const data = {
+          query,
+          top_k: parseInt($('search-topk').value) || 10,
+          chapter_filter: $('search-chapter').value || null,
+          content_type_filter: $('search-type').value || null,
+          topic_tags: $('search-tags').value.split(',').map(t => t.trim()).filter(t => t)
+        };
+
+        const result = await apiCall('/api/rag/search', data);
+
+        // Populate table
+        const tbody = $('search-tbody');
+        tbody.innerHTML = '';
+        result.results.forEach(r => {
+          const tr = document.createElement('tr');
+          const meta = r.metadata;
+          tr.innerHTML = `
+            <td class="col-score">${r.score.toFixed(4)}</td>
+            <td class="col-file" title="${escHtml(meta.source_file)}">${escHtml(meta.source_file)}</td>
+            <td class="col-meta">${escHtml(meta.chapter || 'N/A')}</td>
+            <td class="col-meta">${escHtml(meta.content_type || 'N/A')}</td>
+            <td class="col-text">${escHtml(r.text)}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+
+        $('search-count').textContent = result.count;
+        show($('search-results-card'));
+
+      } catch (err) {
+        $('search-error-msg').textContent = String(err);
+        show($('search-error-card'));
+      } finally {
+        $('btn-search').disabled = false;
+        $('btn-search').textContent = '🔍 Search';
+      }
+    }
+
+    $('btn-search').addEventListener('click', runSearch);
+    $('btn-search-clear').addEventListener('click', () => {
+      $('search-input').value = '';
+      clearInputError('search-input', 'search-input-error');
+      hide($('search-results-card'));
+      hide($('search-error-card'));
+      $('search-topk').value = '10';
+      $('search-chapter').value = '';
+      $('search-type').value = '';
+      $('search-tags').value = '';
+    });
+    $('search-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); runSearch(); }
+    });
+    $('search-input').addEventListener('input', () => {
+      if ($('search-input').value.trim()) clearInputError('search-input', 'search-input-error');
+    });
+
+    // ══════════════════════════════════════════════════════════════════
+    // TAB 3: INGESTION
+    // ══════════════════════════════════════════════════════════════════
+    let ingestJobId = null;
+    let ingestPollTimer = null;
+    let ingestLogSeenCount = 0; // track how many log lines we've already appended
+
+    async function startIngest() {
+      hide($('ingest-done'));
+      hide($('ingest-error-card'));
+      show($('ingest-progress'));
+      $('ingest-log').innerHTML = '';
+      $('ingest-stats').innerHTML = '';
+      $('btn-ingest').disabled = true;
+      ingestLogSeenCount = 0;
+      show($('btn-ingest-cancel'));
+
+      appendLog($('ingest-log'), '🚀 Starting ingestion...');
+
+      try {
+        const result = await apiCall('/api/rag/ingest', {});
+        ingestJobId = result.job_id;
+        startIngestPolling();
+      } catch (err) {
+        hide($('ingest-progress'));
+        hide($('btn-ingest-cancel'));
+        $('btn-ingest').disabled = false;
+        $('ingest-error-msg').textContent = String(err);
+        show($('ingest-error-card'));
+      }
+    }
+
+    function startIngestPolling() {
+      ingestPollTimer = setInterval(async () => {
+        try {
+          const r = await fetch(`/api/rag/ingest/status/${ingestJobId}`);
+          if (!r.ok) return;
+          const data = await r.json();
+
+          // Only append lines we haven't seen yet
+          if (data.log && data.log.length > ingestLogSeenCount) {
+            const newLines = data.log.slice(ingestLogSeenCount);
+            newLines.forEach(msg => appendLog($('ingest-log'), msg));
+            ingestLogSeenCount = data.log.length;
+            $('ingest-log-count').textContent = `${ingestLogSeenCount} lines`;
+          }
+
+          if (data.status === 'done') {
+            stopIngestPolling();
+            onIngestDone(data);
+          } else if (data.status === 'error') {
+            stopIngestPolling();
+            onIngestError(data.error || 'Unknown error');
+          } else if (data.status === 'cancelled') {
+            stopIngestPolling();
+            resetIngestUI();
+          }
+        } catch (err) {
+          console.error('Poll error:', err);
+        }
+      }, 1500);
+    }
+
+    function stopIngestPolling() {
+      if (ingestPollTimer) { clearInterval(ingestPollTimer); ingestPollTimer = null; }
+    }
+
+    function onIngestDone(data) {
+      hide($('ingest-progress'));
+      hide($('btn-ingest-cancel'));
+
+      $('ingest-final-stats').innerHTML = `
+        <span class="stat-pill">📦 ${data.chunks_created} chunks</span>
+        <span class="stat-pill">🔤 ${data.total_tokens.toLocaleString()} tokens</span>
+      `;
+      show($('ingest-done'));
+    }
+
+    function onIngestError(msg) {
+      hide($('ingest-progress'));
+      hide($('btn-ingest-cancel'));
+      $('btn-ingest').disabled = false;
+      $('ingest-error-msg').textContent = msg;
+      show($('ingest-error-card'));
+    }
+
+    function resetIngestUI() {
+      hide($('ingest-progress'));
+      hide($('btn-ingest-cancel'));
+      hide($('ingest-done'));
+      hide($('ingest-error-card'));
+      $('btn-ingest').disabled = false;
+      ingestJobId = null;
+      ingestLogSeenCount = 0;
+    }
+
+    $('btn-ingest').addEventListener('click', startIngest);
+    $('btn-ingest-cancel').addEventListener('click', async () => {
+      if (ingestJobId) {
+        await fetch(`/api/rag/ingest/cancel/${ingestJobId}`, { method: 'POST' });
+        stopIngestPolling();
+        resetIngestUI();
+      }
+    });
+    $('btn-ingest-new').addEventListener('click', resetIngestUI);
+
+    // ══════════════════════════════════════════════════════════════════
+    // TAB 4: CONFIG
+    // ══════════════════════════════════════════════════════════════════
+    async function loadConfig() {
+      $('config-display').textContent = 'Loading...';
+      try {
+        const result = await apiCall('/api/rag/config');
+        $('config-display').textContent = JSON.stringify(result, null, 2);
+      } catch (err) {
+        $('config-display').textContent = 'Error loading config: ' + err;
+      }
+    }
+
+    $('btn-config-refresh').addEventListener('click', loadConfig);
+    // Load config only when the tab is activated (not on page load)
+    document.querySelector('[data-tab="config"]').addEventListener('click', loadConfig);
+
+    // ── Utils ────────────────────────────────────────────────────────
+    function escHtml(s) {
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+  })();
+  </script>
+
+</body>
+</html>
